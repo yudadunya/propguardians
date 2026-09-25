@@ -215,15 +215,9 @@ export function detectICTPattern(
   // OTE approx: price in 62-79% retracement of last impulse leg
   let inOTE = false
   if (fvg && sweepLevel !== null) {
-    const leg = Math.abs(fvg.mid - sweepLevel)
-    if (leg > 0) {
-      const retrace = direction === 'long'
-        ? (rangeHigh - last.close) / (rangeHigh - rangeLow || 1)
-        : (last.close - rangeLow) / (rangeHigh - rangeLow || 1)
-      // simplified: mid of FVG in discount/premium zone counts as OTE-ish
-      inOTE = direction === 'long' ? inDiscount : inPremium
-      if (inOTE) notes.push('OTE-like (FVG in discount/premium)')
-    }
+    // simplified: FVG in discount/premium zone counts as OTE-like
+    inOTE = direction === 'long' ? inDiscount : inPremium
+    if (inOTE) notes.push('OTE-like (FVG in discount/premium)')
   } else if (direction === 'long' && inDiscount) {
     inOTE = true
   } else if (direction === 'short' && inPremium) {
