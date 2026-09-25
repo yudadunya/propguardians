@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../hooks/useStore'
 import { runPhase1Pipeline, createDetectedSetup, ICT_CORE_VERSION } from '../lib/agents'
 import { KILL_ZONES } from '../lib/ictCore'
+import { detectICTPattern, generateDemoCandles } from '../lib/patternDetector'
 import type { ICTStructureInput, KillZone, SweepType, SynthesisOutput } from '../types/ict'
 import type { SetupAnalysis } from '../types'
 
@@ -45,6 +46,35 @@ export default function Analyzer() {
   const { account, personalRules, dailyLog, addAnalysis, addDetectedSetup, featureWeights, rsiModelVersion } = useStore()
   const [form, setForm] = useState(defaultForm)
   const [result, setResult] = useState<SynthesisOutput | null>(null)
+  const [scanNotes, setScanNotes] = useState<string[]>([])
+
+  function scanDemo() {
+    const candles = generateDemoCandles(form.instrument)
+    // Force NY AM hour for demo high-probability window
+    const pattern = detectICTPattern(candles, form.instrument, form.timeframe, 9)
+    if (!pattern) {
+      setScanNotes(['Scan gagal: data terlalu pendek'])
+      return
+    }
+    setForm((f) => ({
+      ...f,
+      direction: pattern.direction,
+      killZone: pattern.killZone === 'outside' ? 'ny_am' : pattern.killZone,
+      hasLiquiditySweep: pattern.hasLiquiditySweep,
+      sweepType: pattern.sweepType,
+      hasDisplacement: pattern.hasDisplacement,
+      hasMSS: pattern.hasMSS,
+      hasFVG: pattern.hasFVG,
+      fvgPartiallyFilled: pattern.fvgPartiallyFilled,
+      inPremium: pattern.inPremium,
+      inDiscount: pattern.inDiscount,
+      inOTE: pattern.inOTE,
+      stopDistance: pattern.stopDistance,
+      rrRatio: pattern.rrRatio,
+    }))
+    setScanNotes(pattern.notes.length ? pattern.notes : ['Pattern detected'])
+    setResult(null)
+  }
 
   function run() {
     // AI bias: direction determines sweep type (SSL→long, BSL→short). User never picks sweep manually.
@@ -86,10 +116,10 @@ export default function Analyzer() {
       <div>
         <h2 className="text-2xl font-bold">ICT Core Analyzer</h2>
         <p className="text-slate-400 text-sm mt-1">
-          Phase 4 — Multi-Agent + RSI · ICT v{ICT_CORE_VERSION} · Model {rsiModelVersion}
+          Phase 5 — Auto Pattern + Multi-Agent + RSI · Model {rsiModelVersion}
         </p>
         <p className="text-slate-500 text-xs mt-1">
-          Checklist ICT Core. Bias/sweep type di-infer AI dari Direction (Long→SSL, Short→BSL).
+          Scan OHLC (demo) mengisi struktur otomatis. Bias/sweep di-infer sistem — bukan input manual.
         </p>
       </div>
 
@@ -213,12 +243,31 @@ export default function Analyzer() {
           </div>
         </div>
 
-        <button
-          onClick={run}
-          className="w-full mt-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium text-sm transition-colors"
-        >
-          Run Structure + Risk Agents
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2 mt-2">
+          <button
+            type="button"
+            onClick={scanDemo}
+            className="flex-1 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 rounded-lg font-medium text-sm transition-colors"
+          >
+            Scan OHLC (Demo)
+          </button>
+          <button
+            type="button"
+            onClick={run}
+            className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium text-sm transition-colors"
+          >
+            Run Multi-Agent
+          </button>
+        </div>
+        {scanNotes.length > 0 && (
+          <div className="text-xs text-sky-300/90 bg-sky-950/30 border border-sky-500/20 rounded-lg p-3 space-y-1">
+            <div className="font-medium text-sky-400">Pattern Detector</div>
+            {scanNotes.map((n, i) => (
+              <div key={i}>· {n}</div>
+            ))}
+            <div className="text-slate-500 pt-1">Checklist diisi otomatis — klik Run Multi-Agent untuk grade</div>
+          </div>
+        )}
       </div>
 
       {result && (
