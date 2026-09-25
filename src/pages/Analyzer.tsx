@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useStore } from '../hooks/useStore'
 import { runPhase1Pipeline, createDetectedSetup } from '../lib/agents'
 import { KILL_ZONES } from '../lib/ictCore'
@@ -52,6 +52,10 @@ export default function Analyzer() {
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
   const [schedule, setSchedule] = useState(() => getScheduleStatus())
+  const [autopilot, setAutopilot] = useState(false)
+  const [autoIntervalMin, setAutoIntervalMin] = useState(5)
+  const [lastAutoAt, setLastAutoAt] = useState<string | null>(null)
+  const analyzeLiveRef = useRef<() => Promise<void>>(async () => {})
 
   async function analyzeLive() {
     setSchedule(getScheduleStatus())
@@ -244,12 +248,43 @@ export default function Analyzer() {
     addAnalysis(legacy)
   }
 
+  // Keep analyzeLive stable for interval
+  analyzeLiveRef.current = analyzeLive
+
+  // Refresh ICT clock every 30s
+  useEffect(() => {
+    const t = setInterval(() => setSchedule(getScheduleStatus()), 30000)
+    return () => clearInterval(t)
+  }, [])
+
+  // Autopilot: when enabled + in kill zone / pre-window, run Analyze Live on interval
+  useEffect(() => {
+    if (!autopilot) return
+    const tick = () => {
+      const s = getScheduleStatus()
+      setSchedule(s)
+      if (!s.shouldWork) return
+      if (scanning) return
+      void analyzeLiveRef.current()
+      setLastAutoAt(new Date().toLocaleTimeString())
+    }
+    // run once when entering autopilot if should work
+    const s0 = getScheduleStatus()
+    if (s0.shouldWork) {
+      void analyzeLiveRef.current()
+      setLastAutoAt(new Date().toLocaleTimeString())
+    }
+    const ms = Math.max(1, autoIntervalMin) * 60 * 1000
+    const id = setInterval(tick, ms)
+    return () => clearInterval(id)
+  }, [autopilot, autoIntervalMin])
+
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
         <h2 className="text-2xl font-bold">ICT Core Analyzer</h2>
         <p className="text-slate-400 text-sm mt-1">
-          Phase 7 — ICT Schedule + Analyze Live · Model {rsiModelVersion}
+          Phase 8 — Autopilot Kill Zone · Model {rsiModelVersion}
         </p>
         <p className="text-slate-500 text-xs mt-1">
           ICT Kill Zone menentukan kapan AI bekerja. Analyze Live = scan biquote + multi-agent (bias penuh AI).
@@ -279,6 +314,39 @@ export default function Analyzer() {
           }`}>
             {schedule.inKillZone ? 'KILL ZONE AKTIF' : schedule.shouldWork ? 'PRE-WINDOW' : 'STANDBY'}
           </div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-slate-700/80 flex flex-wrap items-center gap-3 text-xs">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autopilot}
+              onChange={(e) => setAutopilot(e.target.checked)}
+              className="w-4 h-4 rounded"
+            />
+            <span className="font-medium text-slate-200">Autopilot Kill Zone</span>
+          </label>
+          <span className="text-slate-500">tiap</span>
+          <select
+            value={autoIntervalMin}
+            onChange={(e) => setAutoIntervalMin(Number(e.target.value))}
+            className="bg-slate-900 border border-slate-600 rounded px-2 py-1"
+            disabled={!autopilot}
+          >
+            <option value={3}>3 menit</option>
+            <option value={5}>5 menit</option>
+            <option value={10}>10 menit</option>
+            <option value={15}>15 menit</option>
+          </select>
+          <span className="text-slate-500">
+            {autopilot
+              ? schedule.shouldWork
+                ? 'AI scan otomatis saat jendela ICT'
+                : 'Menunggu kill zone berikutnya…'
+              : 'Off — klik Analyze Live manual'}
+          </span>
+          {lastAutoAt && autopilot && (
+            <span className="text-emerald-500/80">Last auto: {lastAutoAt}</span>
+          )}
         </div>
       </div>
 
