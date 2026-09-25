@@ -1,24 +1,24 @@
 # Prop Guardian RSI
 
-AI Trader — Live OHLC (biquote) + ICT Pattern + Multi-Agent + RSI.
+## Phase 7 — ICT Schedule + Analyze Live
 
-## Phase 6
+AI bekerja menurut **Kill Zone ICT** (waktu New York):
 
-- **Scan Live (biquote)** — free, no API key: `https://biquote.io/api/{symbol}/ohlc`
-- Symbol map: NAS100 → USTEC
-- Scan Demo tetap ada sebagai fallback
-- Pipeline: OHLC → Pattern Detector → Structure → Edge → Devil → Risk
+| Zone | Jam NY | Prioritas |
+|------|--------|-----------|
+| London | 02:00–05:00 | High |
+| NY AM | 07:00–10:00 | High |
+| Silver Bullet | 10:00–11:00 | High |
+| NY PM | 13:30–16:00 | Medium |
+
+- **Di dalam / 15 menit sebelum** kill zone → status AKTIF / PRE-WINDOW
+- **Di luar** → STANDBY (bisa tetap analisa manual)
+- **Analyze Live (AI)** = satu klik: biquote OHLC → pattern → bias AI → multi-agent → grade
 
 ## Deploy
 
 ```bash
 git add .
-git commit -m "Phase 6: biquote live OHLC integration"
+git commit -m "Phase 7: ICT kill zone schedule + Analyze Live one-click"
 git push
 ```
-
-## Uji
-
-1. Instrument XAUUSD, TF M15
-2. **Scan Live (biquote)**
-3. **Run Multi-Agent**

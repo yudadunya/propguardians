@@ -4,6 +4,7 @@ import { runPhase1Pipeline, createDetectedSetup } from '../lib/agents'
 import { KILL_ZONES } from '../lib/ictCore'
 import { detectICTPattern, generateDemoCandles } from '../lib/patternDetector'
 import { fetchOhlc } from '../lib/marketData'
+import { getScheduleStatus, formatNyTime } from '../lib/killZoneSchedule'
 import type { ICTStructureInput, KillZone, SweepType, SynthesisOutput } from '../types/ict'
 import type { SetupAnalysis } from '../types'
 
@@ -50,6 +51,91 @@ export default function Analyzer() {
   const [scanNotes, setScanNotes] = useState<string[]>([])
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
+  const [schedule, setSchedule] = useState(() => getScheduleStatus())
+
+  async function analyzeLive() {
+    setSchedule(getScheduleStatus())
+    setScanning(true)
+    setScanError(null)
+    setResult(null)
+    try {
+      const { candles, sourceSymbol, interval } = await fetchOhlc(
+        form.instrument,
+        form.timeframe,
+        120
+      )
+      const pattern = detectICTPattern(candles, form.instrument, form.timeframe)
+      if (!pattern) {
+        setScanNotes(['Analyze Live: pattern tidak terdeteksi'])
+        setScanning(false)
+        return
+      }
+      // AI determines bias fully — no manual direction
+      const nextForm = {
+        ...form,
+        direction: pattern.direction,
+        killZone: pattern.killZone,
+        hasLiquiditySweep: pattern.hasLiquiditySweep,
+        sweepType: pattern.sweepType,
+        hasDisplacement: pattern.hasDisplacement,
+        hasMSS: pattern.hasMSS,
+        hasFVG: pattern.hasFVG,
+        fvgPartiallyFilled: pattern.fvgPartiallyFilled,
+        inPremium: pattern.inPremium,
+        inDiscount: pattern.inDiscount,
+        inOTE: pattern.inOTE,
+        stopDistance: pattern.stopDistance,
+        rrRatio: pattern.rrRatio,
+      }
+      setForm(nextForm)
+      setScanNotes([
+        `ANALYZE LIVE ${sourceSymbol} ${interval} · ${candles.length} bars`,
+        `Bias AI: ${pattern.direction.toUpperCase()} (bukan manual)`,
+        ...pattern.notes,
+      ])
+
+      // Auto-run multi-agent with inferred structure
+      const inferredSweep = !nextForm.hasLiquiditySweep
+        ? 'none'
+        : nextForm.direction === 'long'
+          ? 'ssl'
+          : 'bsl'
+      const input = {
+        ...nextForm,
+        sweepType: inferredSweep as typeof nextForm.sweepType,
+        inDiscount: nextForm.direction === 'long',
+        inPremium: nextForm.direction === 'short',
+      }
+      const synthesis = runPhase1Pipeline(
+        input,
+        account,
+        personalRules,
+        dailyLog,
+        featureWeights
+      )
+      setResult(synthesis)
+      const detected = createDetectedSetup(input, synthesis)
+      addDetectedSetup(detected)
+      addAnalysis({
+        grade: synthesis.grade,
+        score: synthesis.combinedScore,
+        reasons: synthesis.reasons,
+        warnings: synthesis.warnings,
+        recommendedRisk: synthesis.risk.recommendedRiskPercent,
+        positionSize: synthesis.risk.positionSize,
+        advice: synthesis.advice,
+        instrument: nextForm.instrument,
+        direction: nextForm.direction,
+        session: nextForm.killZone,
+        timestamp: new Date().toISOString(),
+      })
+    } catch (e) {
+      setScanError(e instanceof Error ? e.message : 'Analyze Live gagal')
+      setScanNotes([])
+    } finally {
+      setScanning(false)
+    }
+  }
 
   async function scanLive() {
     setScanning(true)
@@ -163,11 +249,37 @@ export default function Analyzer() {
       <div>
         <h2 className="text-2xl font-bold">ICT Core Analyzer</h2>
         <p className="text-slate-400 text-sm mt-1">
-          Phase 6 — Live biquote + Pattern + Multi-Agent + RSI · Model {rsiModelVersion}
+          Phase 7 — ICT Schedule + Analyze Live · Model {rsiModelVersion}
         </p>
         <p className="text-slate-500 text-xs mt-1">
-          Scan OHLC (demo) mengisi struktur otomatis. Bias/sweep di-infer sistem — bukan input manual.
+          ICT Kill Zone menentukan kapan AI bekerja. Analyze Live = scan biquote + multi-agent (bias penuh AI).
         </p>
+      </div>
+
+      <div className={`rounded-xl p-4 border text-sm ${
+        schedule.inKillZone
+          ? 'bg-emerald-950/40 border-emerald-500/40'
+          : schedule.shouldWork
+            ? 'bg-amber-950/30 border-amber-500/30'
+            : 'bg-slate-800/60 border-slate-700'
+      }`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="font-medium text-slate-200">
+              Jadwal ICT · {formatNyTime()}
+            </div>
+            <div className="text-xs text-slate-400 mt-0.5">{schedule.message}</div>
+          </div>
+          <div className={`text-xs px-2 py-1 rounded-lg font-medium ${
+            schedule.inKillZone
+              ? 'bg-emerald-600/30 text-emerald-300'
+              : schedule.shouldWork
+                ? 'bg-amber-600/30 text-amber-300'
+                : 'bg-slate-700 text-slate-400'
+          }`}>
+            {schedule.inKillZone ? 'KILL ZONE AKTIF' : schedule.shouldWork ? 'PRE-WINDOW' : 'STANDBY'}
+          </div>
+        </div>
       </div>
 
       <div className="bg-slate-800/80 border border-slate-700 rounded-xl p-5 space-y-4">
@@ -293,11 +405,19 @@ export default function Analyzer() {
         <div className="flex flex-col sm:flex-row gap-2 mt-2">
           <button
             type="button"
+            onClick={analyzeLive}
+            disabled={scanning}
+            className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors"
+          >
+            {scanning ? 'Analyzing…' : 'Analyze Live (AI)'}
+          </button>
+          <button
+            type="button"
             onClick={scanLive}
             disabled={scanning}
             className="flex-1 px-4 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors"
           >
-            {scanning ? 'Scanning…' : 'Scan Live (biquote)'}
+            {scanning ? 'Scanning…' : 'Scan Only'}
           </button>
           <button
             type="button"
