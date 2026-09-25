@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../hooks/useStore'
 import { runPhase1Pipeline, createDetectedSetup } from '../lib/agents'
 import { KILL_ZONES } from '../lib/ictCore'
