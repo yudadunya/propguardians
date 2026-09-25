@@ -12,7 +12,7 @@ export function runRiskAgent(
   account: PropAccount,
   personal: PersonalRules,
   dailyLog: DailyLog,
-  structureScore: number,
+  _structureScore: number,
   stopDistance: number,
   gradeHint: 'A' | 'B' | 'C' | 'D'
 ) {
