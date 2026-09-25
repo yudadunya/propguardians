@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../hooks/useStore'
-import { runPhase1Pipeline, createDetectedSetup, ICT_CORE_VERSION, EDGE_MODEL_VERSION } from '../lib/agents'
+import { runPhase1Pipeline, createDetectedSetup, ICT_CORE_VERSION } from '../lib/agents'
 import { KILL_ZONES } from '../lib/ictCore'
 import type { ICTStructureInput, KillZone, SweepType, SynthesisOutput } from '../types/ict'
 import type { SetupAnalysis } from '../types'

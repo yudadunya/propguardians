@@ -151,9 +151,6 @@ export function runRSIUpdate(
     }
   })
 
-  const verNum = parseFloat(currentVersion.replace(/[^\d.]/g, '')) || 4.0
-  const newVersion = `4.${Math.floor(verNum * 10 + 1) / 10}`.replace(/\.(\d)$/, '.$10') // simple bump
-  // cleaner version bump
   const parts = currentVersion.split('.')
   let patch = parseInt(parts[2] || '0', 10) + 1
   const bumped = `${parts[0] || '4'}.${parts[1] || '0'}.${patch}`
