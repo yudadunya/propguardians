@@ -309,25 +309,17 @@ export default function Analyzer() {
             </select>
           </div>
                     <div>
-            <label className="text-xs text-slate-400">Direction (AI Bias)</label>
-            <select
-              className="w-full mt-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm"
-              value={form.direction}
-              onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  direction: e.target.value as 'long' | 'short',
-                  inDiscount: e.target.value === 'long',
-                  inPremium: e.target.value === 'short',
-                  sweepType: e.target.value === 'long' ? 'ssl' : 'bsl',
-                }))
-              }
-            >
-              <option value="long">Long (infer SSL sweep)</option>
-              <option value="short">Short (infer BSL sweep)</option>
-            </select>
+            <label className="text-xs text-slate-400">Bias (AI only)</label>
+            <div className="w-full mt-1 bg-slate-900/80 border border-slate-600 rounded-lg px-3 py-2 text-sm flex items-center justify-between">
+              <span className={form.direction === 'long' ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold'}>
+                {form.direction === 'long' ? 'LONG' : 'SHORT'}
+              </span>
+              <span className="text-[10px] text-slate-500">
+                {form.direction === 'long' ? 'SSL inferred' : 'BSL inferred'}
+              </span>
+            </div>
             <p className="text-[10px] text-slate-500 mt-1">
-              Sweep type tidak dipilih manual — sistem mengunci SSL untuk Long, BSL untuk Short
+              Tidak bisa diubah manual — bias dari Pattern Detector / Analyze Live
             </p>
           </div>
           <div>
