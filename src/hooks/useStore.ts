@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AppState, Trade, SetupAnalysis } from '../types'
+import type { DetectedSetup } from '../types/ict'
+import { ICT_CORE_VERSION } from '../lib/ictCore'
 
 const defaultState: AppState = {
   account: {
@@ -20,18 +22,20 @@ const defaultState: AppState = {
     maxTradesPerDay: 3,
   },
   plan: {
-    name: 'Default ICT Plan',
+    name: 'ICT Core v1',
     instruments: ['XAUUSD', 'NAS100', 'EURUSD'],
     primaryTF: 'H1',
     confirmationTF: 'M15',
-    entryRules: 'Liquidity sweep + Market Structure Shift + Fair Value Gap',
-    stopRules: 'Below/above sweep wick + 2-3 pips buffer',
-    targetRules: 'Minimum 1:2 R:R, prefer next liquidity pool',
-    sessions: ['London', 'New York'],
+    entryRules: 'Sweep + MSS + Displacement + FVG (ICT Core)',
+    stopRules: 'Beyond sweep extreme + buffer',
+    targetRules: 'Opposing liquidity, min 1:2 R:R',
+    sessions: ['london', 'ny_am', 'silver_bullet'],
     isActive: true,
   },
   trades: [],
   analyses: [],
+  detectedSetups: [],
+  ictCoreVersion: ICT_CORE_VERSION,
   dailyLog: {
     date: new Date().toISOString().slice(0, 10),
     startingEquity: 100000,
@@ -47,6 +51,7 @@ interface Store extends AppState {
   updatePlan: (field: string, value: unknown) => void
   addTrade: (trade: Trade) => void
   addAnalysis: (analysis: SetupAnalysis) => void
+  addDetectedSetup: (setup: DetectedSetup) => void
   resetAll: () => void
   ensureDailyLog: () => void
 }
@@ -99,6 +104,11 @@ export const useStore = create<Store>()(
           analyses: [analysis, ...s.analyses].slice(0, 50),
         })),
 
+      addDetectedSetup: (setup) =>
+        set((s) => ({
+          detectedSetups: [setup, ...(s.detectedSetups || [])].slice(0, 100),
+        })),
+
       resetAll: () => set({ ...defaultState }),
 
       ensureDailyLog: () => {
@@ -118,7 +128,7 @@ export const useStore = create<Store>()(
       },
     }),
     {
-      name: 'prop-guardian-storage',
+      name: 'prop-guardian-storage-v2',
     }
   )
 )

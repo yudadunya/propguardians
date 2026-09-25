@@ -1,75 +1,46 @@
-# Prop Guardian
+# Prop Guardian RSI
 
-AI Risk & Process Coach untuk Prop Trader.
+AI Trader Profesional berbasis **ICT Core** + **Prop Risk Guardian** dengan fondasi Recursive Self-Improvement.
 
-## Fitur
+## Phase 1 (saat ini)
 
-- **Risk Dashboard** — monitor drawdown, daily PnL, consecutive losses
-- **Setup Quality Analyzer** — Grade A/B/C/D berdasarkan Trading Plan
-- **Trade Journal** — catat trade dalam R-multiple + auto update risk
-- **Trading Plan Engine** — definisikan edge kamu
-- **Personal Rules** — lebih ketat dari aturan firm (kunci survival)
+- ICT Core Rules (Kill Zone, Sweep, Displacement, MSS, FVG, Premium/Discount, OTE)
+- Structure Agent (checklist ketat)
+- Risk Agent / Prop Guardian (veto power)
+- Synthesis → Grade A/B/C/D + decision take/skip/blocked
+- Detected setups tersimpan (siap untuk RSI Phase 2+)
 
-## Tech Stack
+## Tech
 
-- React 19 + TypeScript
-- Vite 6
+- React 19 + TypeScript + Vite
+- Zustand (persist)
 - Tailwind CSS 4
-- Zustand (state + persist)
-- React Router 7
 
-## Cara Menjalankan Lokal
+## Local
 
 ```bash
 npm install
 npm run dev
 ```
 
-Buka http://localhost:3000
+## Deploy (GitHub → Vercel)
 
-## Deploy ke Vercel (via GitHub)
+Push repo → Import di Vercel → Framework Vite → Output `dist`
 
-1. Push repo ke GitHub
-2. Import project di [vercel.com](https://vercel.com)
-3. Framework Preset: **Vite**
-4. Build Command: `npm run build`
-5. Output Directory: `dist`
-6. Deploy
+## ICT Core Checklist (Grade A butuh)
 
-File `vercel.json` sudah disiapkan untuk handle SPA routing.
+1. Kill Zone (London / NY AM / Silver Bullet)
+2. Liquidity Sweep (BSL/SSL)
+3. Displacement
+4. MSS / CHoCH
+5. Fair Value Gap
+6. Premium (short) / Discount (long)
+7. OTE bonus (0.62–0.79)
+8. R:R ≥ 2
+9. Risk Guardian approve
 
-## Environment Variables
+## Roadmap
 
-Copy `.env.example` → `.env.local` dan isi jika dibutuhkan (untuk fitur AI lanjutan).
-
-```bash
-cp .env.example .env.local
-```
-
-## Struktur Folder
-
-```
-prop-guardian-react/
-├── public/
-├── src/
-│   ├── components/     # (siap ditambah)
-│   ├── hooks/          # useStore (Zustand)
-│   ├── lib/            # risk, analyzer, storage
-│   ├── pages/          # Dashboard, Analyzer, Journal, Plan, Settings
-│   ├── types/
-│   ├── App.tsx
-│   ├── main.tsx
-│   └── index.css
-├── .env.example
-├── .gitignore
-├── index.html
-├── package.json
-├── tsconfig.json
-├── vercel.json
-└── vite.config.ts
-```
-
-## Catatan
-
-Data disimpan di `localStorage` browser (via Zustand persist).  
-Belum ada backend / realtime market data — fokus ke risk & process dulu.
+- Phase 2: Historical Statistical Engine + Edge Agent
+- Phase 3: Devil’s Advocate + full Multi-Agent
+- Phase 4: RSI (episode tracking, feature weights, model versioning)

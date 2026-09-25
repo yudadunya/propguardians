@@ -51,6 +51,7 @@ export interface DailyLog {
   dailyPnL: number
 }
 
+/** Legacy analysis shape (kept for Dashboard compatibility) */
 export interface SetupAnalysis {
   grade: 'A' | 'B' | 'C' | 'D'
   score: number
@@ -72,4 +73,6 @@ export interface AppState {
   trades: Trade[]
   analyses: SetupAnalysis[]
   dailyLog: DailyLog
+  detectedSetups: import('./ict').DetectedSetup[]
+  ictCoreVersion: string
 }
