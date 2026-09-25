@@ -3,8 +3,39 @@ import { persist } from 'zustand/middleware'
 import type { AppState, Trade, SetupAnalysis } from '../types'
 import type { DetectedSetup } from '../types/ict'
 import { ICT_CORE_VERSION } from '../lib/ictCore'
+import {
+  DEFAULT_WEIGHTS,
+  runRSIUpdate,
+  createEpisodeFromSetup,
+  type FeatureWeights,
+  type Episode,
+  type ModelVersion,
+  RSI_VERSION,
+} from '../lib/rsiEngine'
 
-const defaultState: AppState = {
+interface Store extends AppState {
+  featureWeights: FeatureWeights
+  episodes: Episode[]
+  modelVersions: ModelVersion[]
+  rsiModelVersion: string
+  lastRsiSummary: string | null
+  updateAccount: (field: string, value: unknown) => void
+  updatePersonal: (field: string, value: unknown) => void
+  updatePlan: (field: string, value: unknown) => void
+  addTrade: (trade: Trade) => void
+  addAnalysis: (analysis: SetupAnalysis) => void
+  addDetectedSetup: (setup: DetectedSetup) => void
+  recordOutcome: (
+    setupId: string,
+    actualR: number,
+    features: { fvgPartial: boolean; rrRatio: number; outsideKz: boolean }
+  ) => void
+  runRSI: () => string
+  resetAll: () => void
+  ensureDailyLog: () => void
+}
+
+const defaultState = {
   account: {
     firmName: 'FTMO',
     accountSize: 100000,
@@ -32,10 +63,15 @@ const defaultState: AppState = {
     sessions: ['london', 'ny_am', 'silver_bullet'],
     isActive: true,
   },
-  trades: [],
-  analyses: [],
-  detectedSetups: [],
+  trades: [] as Trade[],
+  analyses: [] as SetupAnalysis[],
+  detectedSetups: [] as DetectedSetup[],
   ictCoreVersion: ICT_CORE_VERSION,
+  featureWeights: { ...DEFAULT_WEIGHTS },
+  episodes: [] as Episode[],
+  modelVersions: [] as ModelVersion[],
+  rsiModelVersion: RSI_VERSION,
+  lastRsiSummary: null as string | null,
   dailyLog: {
     date: new Date().toISOString().slice(0, 10),
     startingEquity: 100000,
@@ -45,36 +81,19 @@ const defaultState: AppState = {
   },
 }
 
-interface Store extends AppState {
-  updateAccount: (field: string, value: unknown) => void
-  updatePersonal: (field: string, value: unknown) => void
-  updatePlan: (field: string, value: unknown) => void
-  addTrade: (trade: Trade) => void
-  addAnalysis: (analysis: SetupAnalysis) => void
-  addDetectedSetup: (setup: DetectedSetup) => void
-  resetAll: () => void
-  ensureDailyLog: () => void
-}
-
 export const useStore = create<Store>()(
   persist(
     (set, get) => ({
       ...defaultState,
 
       updateAccount: (field, value) =>
-        set((s) => ({
-          account: { ...s.account, [field]: value },
-        })),
+        set((s) => ({ account: { ...s.account, [field]: value } })),
 
       updatePersonal: (field, value) =>
-        set((s) => ({
-          personalRules: { ...s.personalRules, [field]: value },
-        })),
+        set((s) => ({ personalRules: { ...s.personalRules, [field]: value } })),
 
       updatePlan: (field, value) =>
-        set((s) => ({
-          plan: { ...s.plan, [field]: value },
-        })),
+        set((s) => ({ plan: { ...s.plan, [field]: value } })),
 
       addTrade: (trade) => {
         const s = get()
@@ -82,7 +101,6 @@ export const useStore = create<Store>()(
         const newBalance = s.account.currentBalance + trade.pnlMoney
         const newHWM = Math.max(s.account.highWaterMark, newBalance)
         const newConsecutive = isWin ? 0 : s.dailyLog.consecutiveLosses + 1
-
         set({
           trades: [trade, ...s.trades],
           account: {
@@ -109,6 +127,81 @@ export const useStore = create<Store>()(
           detectedSetups: [setup, ...(s.detectedSetups || [])].slice(0, 100),
         })),
 
+      recordOutcome: (setupId, actualR, features) => {
+        const s = get()
+        const setup = s.detectedSetups.find((x) => x.id === setupId)
+        if (!setup) return
+
+        const ep = createEpisodeFromSetup(
+          setup,
+          features,
+          actualR,
+          s.rsiModelVersion
+        )
+
+        set({
+          episodes: [ep, ...s.episodes].slice(0, 500),
+          detectedSetups: s.detectedSetups.map((x) =>
+            x.id === setupId
+              ? {
+                  ...x,
+                  actualR,
+                  status:
+                    actualR >= 2
+                      ? 'hit_2r'
+                      : actualR >= 1
+                        ? 'hit_1r'
+                        : actualR > 0
+                          ? 'hit_1r'
+                          : actualR === 0
+                            ? 'expired'
+                            : 'stopped',
+                }
+              : x
+          ),
+        })
+      },
+
+      runRSI: () => {
+        const s = get()
+        const result = runRSIUpdate(
+          s.episodes,
+          s.featureWeights,
+          s.rsiModelVersion
+        )
+        if (result.processed === 0) {
+          set({ lastRsiSummary: result.summary })
+          return result.summary
+        }
+
+        const version: ModelVersion = {
+          version: result.newVersion,
+          parentVersion: s.rsiModelVersion,
+          weights: result.weights,
+          episodeCount: result.processed,
+          avgActualR:
+            s.episodes
+              .filter((e) => !e.processed)
+              .reduce((a, e) => a + e.actualR, 0) / result.processed,
+          winrate2R:
+            s.episodes.filter((e) => !e.processed && e.actualR >= 2).length /
+            result.processed,
+          createdAt: new Date().toISOString(),
+          notes: result.summary,
+        }
+
+        set({
+          featureWeights: result.weights,
+          rsiModelVersion: result.newVersion,
+          lastRsiSummary: result.summary,
+          modelVersions: [version, ...s.modelVersions].slice(0, 20),
+          episodes: s.episodes.map((e) =>
+            e.processed ? e : { ...e, processed: true }
+          ),
+        })
+        return result.summary
+      },
+
       resetAll: () => set({ ...defaultState }),
 
       ensureDailyLog: () => {
@@ -127,8 +220,6 @@ export const useStore = create<Store>()(
         }
       },
     }),
-    {
-      name: 'prop-guardian-storage-v2',
-    }
+    { name: 'prop-guardian-storage-v4' }
   )
 )

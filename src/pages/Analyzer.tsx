@@ -42,13 +42,24 @@ const defaultForm = {
 }
 
 export default function Analyzer() {
-  const { account, personalRules, dailyLog, addAnalysis, addDetectedSetup } = useStore()
+  const { account, personalRules, dailyLog, addAnalysis, addDetectedSetup, featureWeights, rsiModelVersion } = useStore()
   const [form, setForm] = useState(defaultForm)
   const [result, setResult] = useState<SynthesisOutput | null>(null)
 
   function run() {
-    const input: ICTStructureInput = { ...form }
-    const synthesis = runPhase1Pipeline(input, account, personalRules, dailyLog)
+    // AI bias: direction determines sweep type (SSL→long, BSL→short). User never picks sweep manually.
+    const inferredSweep: SweepType = !form.hasLiquiditySweep
+      ? 'none'
+      : form.direction === 'long'
+        ? 'ssl'
+        : 'bsl'
+    const input: ICTStructureInput = {
+      ...form,
+      sweepType: inferredSweep,
+      inDiscount: form.direction === 'long',
+      inPremium: form.direction === 'short',
+    }
+    const synthesis = runPhase1Pipeline(input, account, personalRules, dailyLog, featureWeights)
     setResult(synthesis)
 
     const detected = createDetectedSetup(input, synthesis)
@@ -75,10 +86,10 @@ export default function Analyzer() {
       <div>
         <h2 className="text-2xl font-bold">ICT Core Analyzer</h2>
         <p className="text-slate-400 text-sm mt-1">
-          Phase 3 — Structure + Edge + Devil + Risk · ICT v{ICT_CORE_VERSION} · Edge {EDGE_MODEL_VERSION}
+          Phase 4 — Multi-Agent + RSI · ICT v{ICT_CORE_VERSION} · Model {rsiModelVersion}
         </p>
         <p className="text-slate-500 text-xs mt-1">
-          Checklist ketat: Kill Zone → Sweep → Displacement → MSS → FVG → Premium/Discount → OTE
+          Checklist ICT Core. Bias/sweep type di-infer AI dari Direction (Long→SSL, Short→BSL).
         </p>
       </div>
 
@@ -108,8 +119,8 @@ export default function Analyzer() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="text-xs text-slate-400">Direction</label>
+                    <div>
+            <label className="text-xs text-slate-400">Direction (AI Bias)</label>
             <select
               className="w-full mt-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm"
               value={form.direction}
@@ -123,9 +134,12 @@ export default function Analyzer() {
                 }))
               }
             >
-              <option value="long">Long</option>
-              <option value="short">Short</option>
+              <option value="long">Long (infer SSL sweep)</option>
+              <option value="short">Short (infer BSL sweep)</option>
             </select>
+            <p className="text-[10px] text-slate-500 mt-1">
+              Sweep type tidak dipilih manual — sistem mengunci SSL untuk Long, BSL untuk Short
+            </p>
           </div>
           <div>
             <label className="text-xs text-slate-400">Kill Zone</label>
@@ -141,20 +155,7 @@ export default function Analyzer() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="text-xs text-slate-400">Sweep Type</label>
-            <select
-              className="w-full mt-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm"
-              value={form.sweepType}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, sweepType: e.target.value as SweepType }))
-              }
-            >
-              <option value="ssl">SSL (Sell-side) → bias Long</option>
-              <option value="bsl">BSL (Buy-side) → bias Short</option>
-              <option value="none">None</option>
-            </select>
-          </div>
+          
           <div>
             <label className="text-xs text-slate-400">Stop Distance (pips/pts)</label>
             <input

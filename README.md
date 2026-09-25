@@ -1,30 +1,35 @@
 # Prop Guardian RSI
 
-AI Trader Profesional — ICT Core + Historical Edge + Devil's Advocate + Prop Risk.
+AI Trader Profesional — ICT Core + Multi-Agent + Recursive Self-Improvement.
 
-## Phase 3 (saat ini)
-
-Pipeline:
+## Phase 4 (saat ini)
 
 ```
-Structure → Edge → Devil's Advocate → Risk → Synthesis
+Structure → Edge (weighted) → Devil → Risk → Synthesis
+                    ↑
+              RSI Learning
+         (episodes → weights → model version)
 ```
 
-- **Structure Agent** — ICT Core checklist ketat
-- **Edge Agent** — historical expectancy / WR
-- **Devil's Advocate** — sengaja meruntuhkan thesis (critical → veto)
-- **Risk Agent** — Prop Guardian veto
-- Combined score + grade A/B/C/D
+### Fitur RSI
+- Record outcome (actual R) per setup
+- Batch RSI update (≥3 pending episodes)
+- Feature weights naik/turun dari hasil nyata
+- Model versioning
+- Edge Agent memakai bobot hasil belajar
+
+ICT Core **rules tetap kaku**. Yang berubah hanya **bobot edge**.
 
 ## Deploy
 
 ```bash
 git add .
-git commit -m "Phase 3: Devil's Advocate agent"
+git commit -m "Phase 4: Recursive Self-Improvement engine"
 git push
 ```
 
-## Roadmap
-
-- Phase 4: Recursive Self-Improvement (episodes, weights, model versioning)
-- Live OHLC detection
+## Cara uji RSI
+1. Analyzer → setup Grade A/B TAKE
+2. RSI Learning → isi Actual R → Save (ulang ≥3x)
+3. Run RSI → weights & model version update
+4. Analyzer lagi → Edge memakai bobot baru

@@ -8,7 +8,7 @@ import {
   inferSetupType,
   ICT_CORE_VERSION,
 } from './ictCore'
-import { runEdgeAgent, combinedScore, EDGE_MODEL_VERSION } from './edgeEngine'
+import { runEdgeAgent, combinedScore, EDGE_MODEL_VERSION, type EdgeWeights } from './edgeEngine'
 import { runDevilAgent, applyDevilPenalty } from './devilAgent'
 import { calcPositionSize, getRemainingDailyDD, getOverallDD } from './risk'
 import type {
@@ -125,14 +125,15 @@ export function runPhase1Pipeline(
   input: ICTStructureInput,
   account: PropAccount,
   personal: PersonalRules,
-  dailyLog: DailyLog
+  dailyLog: DailyLog,
+  edgeWeights?: EdgeWeights
 ): SynthesisOutput {
   // 1. Structure
   const structure = runStructureAgent(input)
   const setupType = inferSetupType(structure, input.killZone)
 
-  // 2. Edge
-  const edge = runEdgeAgent(input, structure, setupType)
+  // 2. Edge (weights from RSI if available)
+  const edge = runEdgeAgent(input, structure, setupType, edgeWeights)
   let score = combinedScore(
     structure.structureScore,
     edge.edgeScore,

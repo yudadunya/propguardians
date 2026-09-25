@@ -4,6 +4,7 @@ import Analyzer from './pages/Analyzer'
 import Journal from './pages/Journal'
 import Plan from './pages/Plan'
 import Settings from './pages/Settings'
+import Learning from './pages/Learning'
 
 const navItems = [
   { to: '/', label: 'Dashboard' },
@@ -11,6 +12,7 @@ const navItems = [
   { to: '/journal', label: 'Trade Journal' },
   { to: '/plan', label: 'Trading Plan' },
   { to: '/settings', label: 'Account & Rules' },
+  { to: '/learning', label: 'RSI Learning' },
 ]
 
 export default function App() {
@@ -55,6 +57,7 @@ export default function App() {
           <Route path="/journal" element={<Journal />} />
           <Route path="/plan" element={<Plan />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/learning" element={<Learning />} />
         </Routes>
       </main>
     </div>

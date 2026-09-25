@@ -15,6 +15,28 @@ import type {
 
 export const EDGE_MODEL_VERSION = '2.0.0-baseline'
 
+/** Optional learned weights from RSI (Phase 4) */
+export interface EdgeWeights {
+  ote: number
+  premiumDiscount: number
+  displacementFvg: number
+  fvgPartialPenalty: number
+  highRR: number
+  outsideKzPenalty: number
+  killZoneNyAm: number
+  killZoneSilver: number
+  killZoneLondon: number
+  instrumentXau: number
+  instrumentNas: number
+}
+
+const DEFAULT_EDGE_WEIGHTS: EdgeWeights = {
+  ote: 1, premiumDiscount: 1, displacementFvg: 1, fvgPartialPenalty: 1,
+  highRR: 1, outsideKzPenalty: 1, killZoneNyAm: 1, killZoneSilver: 1,
+  killZoneLondon: 1, instrumentXau: 1, instrumentNas: 1,
+}
+
+
 export interface EdgeStatRow {
   setupType: SetupType
   instrument: string | '*' // * = global
@@ -237,7 +259,8 @@ export function lookupEdgeStats(
 export function runEdgeAgent(
   input: ICTStructureInput,
   structure: StructureAgentOutput,
-  setupType: SetupType
+  setupType: SetupType,
+  weights: EdgeWeights = DEFAULT_EDGE_WEIGHTS
 ): EdgeAgentOutput {
   const row = lookupEdgeStats(
     setupType,
@@ -250,35 +273,41 @@ export function runEdgeAgent(
   let expectancyAdj = row.expectancy
   let winrateAdj = row.winrate2R
 
-  // Confluence boosts on top of base stats
+  // Confluence boosts scaled by RSI-learned weights
   if (structure.oteBonus) {
-    expectancyAdj += 0.08
-    winrateAdj += 0.04
-    conditionBoosts.push('OTE overlap (+edge)')
+    expectancyAdj += 0.08 * weights.ote
+    winrateAdj += 0.04 * weights.ote
+    conditionBoosts.push(`OTE overlap (+edge, w=${weights.ote.toFixed(2)})`)
   }
   if (structure.premiumDiscountOk) {
-    expectancyAdj += 0.05
-    winrateAdj += 0.03
-    conditionBoosts.push('Premium/Discount aligned (+edge)')
+    expectancyAdj += 0.05 * weights.premiumDiscount
+    winrateAdj += 0.03 * weights.premiumDiscount
+    conditionBoosts.push(`Premium/Discount aligned (w=${weights.premiumDiscount.toFixed(2)})`)
   }
   if (structure.displacementValid && structure.fvgValid) {
-    expectancyAdj += 0.04
-    conditionBoosts.push('Clean displacement + FVG')
+    expectancyAdj += 0.04 * weights.displacementFvg
+    conditionBoosts.push(`Clean displacement + FVG (w=${weights.displacementFvg.toFixed(2)})`)
   }
   if (input.fvgPartiallyFilled) {
-    expectancyAdj -= 0.08
-    winrateAdj -= 0.05
-    conditionBoosts.push('FVG partially filled (−edge)')
+    expectancyAdj -= 0.08 * weights.fvgPartialPenalty
+    winrateAdj -= 0.05 * weights.fvgPartialPenalty
+    conditionBoosts.push(`FVG partially filled (−edge, w=${weights.fvgPartialPenalty.toFixed(2)})`)
   }
   if (input.rrRatio >= 2.5) {
-    expectancyAdj += 0.03
-    conditionBoosts.push('R:R ≥ 2.5')
+    expectancyAdj += 0.03 * weights.highRR
+    conditionBoosts.push(`R:R ≥ 2.5 (w=${weights.highRR.toFixed(2)})`)
   }
   if (!structure.inKillZone) {
-    expectancyAdj -= 0.25
-    winrateAdj -= 0.15
-    conditionBoosts.push('Outside Kill Zone (−edge)')
+    expectancyAdj -= 0.25 * weights.outsideKzPenalty
+    winrateAdj -= 0.15 * weights.outsideKzPenalty
+    conditionBoosts.push(`Outside Kill Zone (−edge, w=${weights.outsideKzPenalty.toFixed(2)})`)
   }
+  // Session / instrument learned boosts
+  if (input.killZone === 'ny_am') expectancyAdj += 0.02 * (weights.killZoneNyAm - 1)
+  if (input.killZone === 'silver_bullet') expectancyAdj += 0.02 * (weights.killZoneSilver - 1)
+  if (input.killZone === 'london') expectancyAdj += 0.02 * (weights.killZoneLondon - 1)
+  if (input.instrument === 'XAUUSD') expectancyAdj += 0.03 * (weights.instrumentXau - 1)
+  if (input.instrument === 'NAS100') expectancyAdj += 0.03 * (weights.instrumentNas - 1)
 
   winrateAdj = Math.max(0.05, Math.min(0.95, winrateAdj))
   expectancyAdj = Math.round(expectancyAdj * 100) / 100
