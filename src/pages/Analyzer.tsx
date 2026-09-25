@@ -4,7 +4,7 @@ import { runPhase1Pipeline, createDetectedSetup } from '../lib/agents'
 import { KILL_ZONES } from '../lib/ictCore'
 import { detectICTPattern, generateDemoCandles } from '../lib/patternDetector'
 import { fetchOhlc } from '../lib/marketData'
-import { getScheduleStatus, formatNyTime } from '../lib/killZoneSchedule'
+import { getScheduleStatus, formatNyTime, selectAiTimeframe } from '../lib/killZoneSchedule'
 import type { ICTStructureInput, KillZone, SweepType, SynthesisOutput } from '../types/ict'
 import type { SetupAnalysis } from '../types'
 
@@ -58,17 +58,19 @@ export default function Analyzer() {
   const analyzeLiveRef = useRef<() => Promise<void>>(async () => {})
 
   async function analyzeLive() {
-    setSchedule(getScheduleStatus())
+    const sched = getScheduleStatus()
+    setSchedule(sched)
+    const aiTf = selectAiTimeframe(sched.activeZone, form.instrument)
     setScanning(true)
     setScanError(null)
     setResult(null)
     try {
       const { candles, sourceSymbol, interval } = await fetchOhlc(
         form.instrument,
-        form.timeframe,
+        aiTf,
         120
       )
-      const pattern = detectICTPattern(candles, form.instrument, form.timeframe)
+      const pattern = detectICTPattern(candles, form.instrument, aiTf)
       if (!pattern) {
         setScanNotes(['Analyze Live: pattern tidak terdeteksi'])
         setScanning(false)
@@ -77,6 +79,7 @@ export default function Analyzer() {
       // AI determines bias fully — no manual direction
       const nextForm = {
         ...form,
+        timeframe: aiTf,
         direction: pattern.direction,
         killZone: pattern.killZone,
         hasLiquiditySweep: pattern.hasLiquiditySweep,
@@ -142,16 +145,19 @@ export default function Analyzer() {
   }
 
   async function scanLive() {
+    const sched = getScheduleStatus()
+    setSchedule(sched)
+    const aiTf = selectAiTimeframe(sched.activeZone, form.instrument)
     setScanning(true)
     setScanError(null)
     setResult(null)
     try {
       const { candles, sourceSymbol, interval } = await fetchOhlc(
         form.instrument,
-        form.timeframe,
+        aiTf,
         120
       )
-      const pattern = detectICTPattern(candles, form.instrument, form.timeframe)
+      const pattern = detectICTPattern(candles, form.instrument, aiTf)
       if (!pattern) {
         setScanNotes(['Scan live: pattern tidak terdeteksi (data kurang)'])
         setScanning(false)
@@ -195,6 +201,7 @@ export default function Analyzer() {
     }
     setForm((f) => ({
       ...f,
+      timeframe: aiTf,
       direction: pattern.direction,
       killZone: pattern.killZone === 'outside' ? 'ny_am' : pattern.killZone,
       hasLiquiditySweep: pattern.hasLiquiditySweep,
@@ -209,7 +216,11 @@ export default function Analyzer() {
       stopDistance: pattern.stopDistance,
       rrRatio: pattern.rrRatio,
     }))
-    setScanNotes(pattern.notes.length ? pattern.notes : ['Pattern detected'])
+    setScanNotes(
+      pattern.notes.length
+        ? [`TF AI: ${aiTf}`, ...pattern.notes]
+        : [`TF AI: ${aiTf}`, 'Pattern detected']
+    )
     setResult(null)
   }
 
@@ -365,16 +376,14 @@ export default function Analyzer() {
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-400">Timeframe</label>
-            <select
-              className="w-full mt-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm"
-              value={form.timeframe}
-              onChange={(e) => setForm((f) => ({ ...f, timeframe: e.target.value }))}
-            >
-              {['M5', 'M15', 'H1', 'H4'].map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
+            <label className="text-xs text-slate-400">Timeframe (AI only)</label>
+            <div className="w-full mt-1 bg-slate-900/80 border border-slate-600 rounded-lg px-3 py-2 text-sm flex justify-between items-center">
+              <span className="font-semibold text-sky-300">{form.timeframe}</span>
+              <span className="text-[10px] text-slate-500">auto ICT</span>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1">
+              AI pilih TF: Silver Bullet→M5, London/NY AM→M15
+            </p>
           </div>
                     <div>
             <label className="text-xs text-slate-400">Bias (AI only)</label>

@@ -157,3 +157,20 @@ export function formatNyTime(date = new Date()): string {
   const { hour, minute } = getNyNow(date)
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} NY`
 }
+
+
+/** AI chooses execution timeframe from ICT context (user does not pick). */
+export function selectAiTimeframe(
+  killZone: KillZoneId,
+  instrument: string
+): string {
+  // Silver Bullet: tighter window → faster TF
+  if (killZone === 'silver_bullet') return 'M5'
+  // Core kill zones: M15 is standard ICT entry TF
+  if (killZone === 'london' || killZone === 'ny_am') return 'M15'
+  // PM / outside: slightly higher TF to filter noise
+  if (killZone === 'ny_pm') return 'M15'
+  // Standby analysis: H1 structure
+  if (instrument === 'XAUUSD' || instrument === 'NAS100') return 'M15'
+  return 'M15'
+}
