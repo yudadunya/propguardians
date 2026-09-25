@@ -31,6 +31,7 @@ interface Store extends AppState {
     features: { fvgPartial: boolean; rrRatio: number; outsideKz: boolean }
   ) => void
   runRSI: () => string
+  ingestBacktest: (episodes: Episode[], summary: string) => string
   resetAll: () => void
   ensureDailyLog: () => void
 }
@@ -160,6 +161,40 @@ export const useStore = create<Store>()(
               : x
           ),
         })
+      },
+
+      ingestBacktest: (newEpisodes, summary) => {
+        const s = get()
+        const merged = [...newEpisodes, ...s.episodes].slice(0, 500)
+        const result = runRSIUpdate(merged.filter(e => !e.processed), s.featureWeights, s.rsiModelVersion)
+        if (result.processed === 0) {
+          // still store episodes for later
+          set({
+            episodes: merged,
+            lastRsiSummary: summary + ' | ' + result.summary,
+          })
+          return summary + ' — ' + result.summary
+        }
+        set({
+          episodes: merged.map(e => ({ ...e, processed: true })),
+          featureWeights: result.weights,
+          rsiModelVersion: result.newVersion,
+          lastRsiSummary: summary + ' | ' + result.summary,
+          modelVersions: [
+            {
+              version: result.newVersion,
+              parentVersion: s.rsiModelVersion,
+              weights: result.weights,
+              episodeCount: result.processed,
+              avgActualR: 0,
+              winrate2R: 0,
+              createdAt: new Date().toISOString(),
+              notes: summary,
+            },
+            ...s.modelVersions,
+          ].slice(0, 20),
+        })
+        return summary + ' | ' + result.summary
       },
 
       runRSI: () => {

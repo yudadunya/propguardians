@@ -4,6 +4,8 @@ import { runPhase1Pipeline, createDetectedSetup } from '../lib/agents'
 import { KILL_ZONES } from '../lib/ictCore'
 import { detectICTPattern, generateDemoCandles } from '../lib/patternDetector'
 import { fetchOhlc } from '../lib/marketData'
+import { fetchMultiTf, analyzeMultiTf } from '../lib/multiTf'
+import { notifyGrade, ensureNotificationPermission } from '../lib/alerts'
 import { getScheduleStatus, formatNyTime, selectAiTimeframe } from '../lib/killZoneSchedule'
 import type { ICTStructureInput, KillZone, SweepType, SynthesisOutput } from '../types/ict'
 import type { SetupAnalysis } from '../types'
@@ -60,27 +62,34 @@ export default function Analyzer() {
   async function analyzeLive() {
     const sched = getScheduleStatus()
     setSchedule(sched)
-    const aiTf = selectAiTimeframe(sched.activeZone, form.instrument)
     setScanning(true)
     setScanError(null)
     setResult(null)
     try {
-      const { candles, sourceSymbol, interval } = await fetchOhlc(
-        form.instrument,
-        aiTf,
-        120
+      await ensureNotificationPermission()
+      const { htfCandles, ltfCandles, entryTf, biasTf } = await fetchMultiTf(
+        form.instrument
       )
-      const pattern = detectICTPattern(candles, form.instrument, aiTf)
-      if (!pattern) {
-        setScanNotes(['Analyze Live: pattern tidak terdeteksi'])
+      const multi = analyzeMultiTf(
+        form.instrument,
+        htfCandles,
+        ltfCandles,
+        biasTf,
+        entryTf
+      )
+      const pattern = multi.merged
+      if (!pattern.hasLiquiditySweep && !pattern.hasFVG) {
+        setScanNotes([
+          'Analyze Live: structure lemah di multi-TF',
+          ...multi.notes,
+        ])
         setScanning(false)
         return
       }
-      // AI determines bias fully — no manual direction
       const nextForm = {
         ...form,
-        timeframe: aiTf,
-        direction: pattern.direction,
+        timeframe: entryTf,
+        direction: multi.direction,
         killZone: pattern.killZone,
         hasLiquiditySweep: pattern.hasLiquiditySweep,
         sweepType: pattern.sweepType,
@@ -96,12 +105,11 @@ export default function Analyzer() {
       }
       setForm(nextForm)
       setScanNotes([
-        `ANALYZE LIVE ${sourceSymbol} ${interval} · ${candles.length} bars`,
-        `Bias AI: ${pattern.direction.toUpperCase()} (bukan manual)`,
-        ...pattern.notes,
+        `MULTI-TF ${biasTf}+${entryTf} · LTF ${ltfCandles.length} / HTF ${htfCandles.length} bars`,
+        `Bias AI: ${multi.direction.toUpperCase()} · aligned: ${multi.aligned ? 'YES' : 'NO'}`,
+        ...multi.notes,
       ])
 
-      // Auto-run multi-agent with inferred structure
       const inferredSweep = !nextForm.hasLiquiditySweep
         ? 'none'
         : nextForm.direction === 'long'
@@ -121,6 +129,13 @@ export default function Analyzer() {
         featureWeights
       )
       setResult(synthesis)
+      notifyGrade({
+        grade: synthesis.grade,
+        instrument: nextForm.instrument,
+        direction: nextForm.direction,
+        decision: synthesis.decision,
+        expectancy: synthesis.edge.expectancy,
+      })
       const detected = createDetectedSetup(input, synthesis)
       addDetectedSetup(detected)
       addAnalysis({
@@ -299,7 +314,7 @@ export default function Analyzer() {
       <div>
         <h2 className="text-2xl font-bold">ICT Core Analyzer</h2>
         <p className="text-slate-400 text-sm mt-1">
-          Phase 8 — Autopilot Kill Zone · Model {rsiModelVersion}
+          Phase 9–11 · Multi-TF + Backtest + Alerts · Model {rsiModelVersion}
         </p>
         <p className="text-slate-500 text-xs mt-1">
           ICT Kill Zone menentukan kapan AI bekerja. Analyze Live = scan biquote + multi-agent (bias penuh AI).

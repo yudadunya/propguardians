@@ -1,20 +1,13 @@
-# Prop Guardian RSI — Phase 8
+# Prop Guardian — Phase 9 / 10 / 11
 
-## Autopilot Kill Zone
-
-AI bekerja menurut jadwal ICT (waktu New York):
-
-1. Centang **Autopilot Kill Zone**
-2. Pilih interval (3 / 5 / 10 / 15 menit)
-3. Saat status **KILL ZONE AKTIF** atau **PRE-WINDOW** → otomatis **Analyze Live**
-4. Di luar jendela → standby (tidak spam API)
-
-Bias 100% AI. Tidak ada pilihan Direction manual.
+- **9 Historical Training**: RSI Learning → Train XAUUSD / EURUSD / NAS100
+- **10 Alerts**: Browser notification + beep on Grade A/B TAKE
+- **11 Multi-TF**: Analyze Live uses H1 bias + M15/M5 entry (aligned check)
 
 ## Deploy
 
 ```bash
 git add .
-git commit -m "Phase 8: Autopilot during ICT kill zones"
+git commit -m "Phase 9-11: historical training, alerts, multi-TF"
 git push
 ```
