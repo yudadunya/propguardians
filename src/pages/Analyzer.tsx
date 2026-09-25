@@ -165,6 +165,7 @@ export default function Analyzer() {
       }
       setForm((f) => ({
         ...f,
+        timeframe: aiTf,
         direction: pattern.direction,
         killZone: pattern.killZone,
         hasLiquiditySweep: pattern.hasLiquiditySweep,
@@ -181,6 +182,7 @@ export default function Analyzer() {
       }))
       setScanNotes([
         `LIVE ${sourceSymbol} ${interval} · ${candles.length} bars (biquote)`,
+        `TF AI: ${aiTf}`,
         ...pattern.notes,
       ])
     } catch (e) {
@@ -192,9 +194,11 @@ export default function Analyzer() {
   }
 
   function scanDemo() {
+    const sched = getScheduleStatus()
+    const aiTf = selectAiTimeframe(sched.activeZone, form.instrument)
     const candles = generateDemoCandles(form.instrument)
     // Force NY AM hour for demo high-probability window
-    const pattern = detectICTPattern(candles, form.instrument, form.timeframe, 9)
+    const pattern = detectICTPattern(candles, form.instrument, aiTf, 9)
     if (!pattern) {
       setScanNotes(['Scan gagal: data terlalu pendek'])
       return
