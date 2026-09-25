@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../hooks/useStore'
-import { runPhase1Pipeline, createDetectedSetup, ICT_CORE_VERSION } from '../lib/agents'
+import { runPhase1Pipeline, createDetectedSetup, ICT_CORE_VERSION, EDGE_MODEL_VERSION } from '../lib/agents'
 import { KILL_ZONES } from '../lib/ictCore'
 import type { ICTStructureInput, KillZone, SweepType, SynthesisOutput } from '../types/ict'
 import type { SetupAnalysis } from '../types'
@@ -56,7 +56,7 @@ export default function Analyzer() {
 
     const legacy: SetupAnalysis = {
       grade: synthesis.grade,
-      score: synthesis.structure.structureScore,
+      score: synthesis.combinedScore,
       reasons: synthesis.reasons,
       warnings: synthesis.warnings,
       recommendedRisk: synthesis.risk.recommendedRiskPercent,
@@ -75,7 +75,7 @@ export default function Analyzer() {
       <div>
         <h2 className="text-2xl font-bold">ICT Core Analyzer</h2>
         <p className="text-slate-400 text-sm mt-1">
-          Phase 1 — Structure Agent + Risk Guardian · ICT Core v{ICT_CORE_VERSION}
+          Phase 3 — Structure + Edge + Devil + Risk · ICT v{ICT_CORE_VERSION} · Edge {EDGE_MODEL_VERSION}
         </p>
         <p className="text-slate-500 text-xs mt-1">
           Checklist ketat: Kill Zone → Sweep → Displacement → MSS → FVG → Premium/Discount → OTE
@@ -226,11 +226,14 @@ export default function Analyzer() {
             <GradeBadge grade={result.grade} />
             <div>
               <div className="text-xl font-bold">
-                Grade {result.grade} · Score {result.structure.structureScore}/100
+                Grade {result.grade} · Combined {result.combinedScore}/100
               </div>
               <div className="text-sm text-slate-400">
                 {result.setupType.replace(/_/g, ' ')} · {result.decision.toUpperCase()} ·{' '}
                 {result.structure.summary}
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                Structure {result.structure.structureScore} · Edge {result.edge.edgeScore} · E[R] {result.edge.expectancy}
               </div>
             </div>
           </div>
@@ -278,6 +281,79 @@ export default function Analyzer() {
                 {result.decision}
               </div>
             </div>
+          </div>
+
+          <div className="bg-slate-900/60 border border-sky-500/20 rounded-xl p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-xs uppercase tracking-wider text-sky-400 font-medium">
+                Edge Agent (Historical)
+              </div>
+              <div className="text-xs text-slate-500">
+                conf: {result.edge.confidence} · n={result.edge.sampleSize}
+              </div>
+            </div>
+            <div className="text-sm text-slate-300">{result.edge.historicalSummary}</div>
+            <div className="grid grid-cols-3 gap-2 text-sm">
+              <div>
+                <div className="text-xs text-slate-500">WR ≥2R</div>
+                <div className="font-semibold text-sky-300">
+                  {(result.edge.winrate2R * 100).toFixed(0)}%
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">Avg R</div>
+                <div className="font-semibold">{result.edge.avgR.toFixed(2)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">Expectancy</div>
+                <div className={`font-semibold ${result.edge.expectancy >= 0.4 ? 'text-emerald-400' : result.edge.expectancy >= 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                  {result.edge.expectancy.toFixed(2)}R
+                </div>
+              </div>
+            </div>
+            {result.edge.conditionBoosts.length > 0 && (
+              <ul className="text-xs space-y-0.5 pt-1">
+                {result.edge.conditionBoosts.map((b, i) => (
+                  <li key={i} className={b.includes('+') ? 'text-emerald-400' : b.includes('−') || b.includes('-') ? 'text-amber-400' : 'text-slate-400'}>
+                    {b}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className={`rounded-xl p-4 space-y-2 border ${
+            result.devil.veto
+              ? 'bg-red-950/40 border-red-500/40'
+              : result.devil.attackCount > 0
+                ? 'bg-amber-950/30 border-amber-500/30'
+                : 'bg-slate-900/60 border-slate-600/40'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className={`text-xs uppercase tracking-wider font-medium ${
+                result.devil.veto ? 'text-red-400' : result.devil.attackCount > 0 ? 'text-amber-400' : 'text-slate-400'
+              }`}>
+                Devil&apos;s Advocate
+              </div>
+              <div className="text-xs text-slate-500">
+                {result.devil.attackCount} flags · penalty {result.devil.totalPenalty}
+                {result.devil.veto ? ' · VETO' : ''}
+              </div>
+            </div>
+            <div className="text-sm text-slate-300">{result.devil.summary}</div>
+            {result.devil.flags.length > 0 && (
+              <ul className="text-xs space-y-1 pt-1">
+                {result.devil.flags.map((f, i) => (
+                  <li key={i} className={
+                    f.severity === 'critical' ? 'text-red-400' :
+                    f.severity === 'high' ? 'text-orange-400' :
+                    f.severity === 'medium' ? 'text-amber-400' : 'text-slate-400'
+                  }>
+                    [{f.severity}] {f.message}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">

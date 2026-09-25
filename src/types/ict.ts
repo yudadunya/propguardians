@@ -1,11 +1,19 @@
-/** ICT Core Types — Prop Guardian RSI Phase 1 */
+/** ICT Core Types — Prop Guardian RSI */
 
 export type KillZone = 'london' | 'ny_am' | 'silver_bullet' | 'ny_pm' | 'outside'
 export type SweepType = 'bsl' | 'ssl' | 'none'
 export type Direction = 'long' | 'short'
 export type SetupType = 'sweep_mss_fvg' | 'silver_bullet' | 'unicorn' | 'other'
 export type Grade = 'A' | 'B' | 'C' | 'D'
-export type SetupStatus = 'detected' | 'taken' | 'hit_1r' | 'hit_2r' | 'hit_3r' | 'stopped' | 'expired' | 'skipped'
+export type SetupStatus =
+  | 'detected'
+  | 'taken'
+  | 'hit_1r'
+  | 'hit_2r'
+  | 'hit_3r'
+  | 'stopped'
+  | 'expired'
+  | 'skipped'
 
 export interface ICTStructureInput {
   instrument: string
@@ -35,7 +43,7 @@ export interface StructureAgentOutput {
   fvgValid: boolean
   premiumDiscountOk: boolean
   oteBonus: boolean
-  structureScore: number // 0-100
+  structureScore: number
   missing: string[]
   present: string[]
   summary: string
@@ -50,12 +58,44 @@ export interface RiskAgentOutput {
   remainingMaxPct: number
 }
 
+export interface EdgeAgentOutput {
+  matched: boolean
+  setupType: SetupType
+  sampleSize: number
+  winrate2R: number
+  avgR: number
+  expectancy: number
+  edgeScore: number
+  confidence: 'high' | 'medium' | 'low'
+  historicalSummary: string
+  conditionBoosts: string[]
+  modelVersion: string
+}
+
+export interface DevilFlag {
+  severity: 'critical' | 'high' | 'medium' | 'low'
+  code: string
+  message: string
+  scorePenalty: number
+}
+
+export interface DevilAgentOutput {
+  flags: DevilFlag[]
+  totalPenalty: number
+  veto: boolean
+  summary: string
+  attackCount: number
+}
+
 export interface SynthesisOutput {
   grade: Grade
   setupType: SetupType
   decision: 'take' | 'skip' | 'blocked'
   structure: StructureAgentOutput
+  edge: EdgeAgentOutput
+  devil: DevilAgentOutput
   risk: RiskAgentOutput
+  combinedScore: number
   reasons: string[]
   warnings: string[]
   advice: string
@@ -73,6 +113,8 @@ export interface DetectedSetup {
   killZone: KillZone
   grade: Grade
   structureScore: number
+  edgeScore: number
+  expectancy: number
   decision: 'take' | 'skip' | 'blocked'
   synthesis: SynthesisOutput
   status: SetupStatus

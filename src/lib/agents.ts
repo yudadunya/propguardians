@@ -1,11 +1,25 @@
 /**
- * Multi-Agent Phase 1: Structure + Risk + Synthesis
- * Edge Agent + Devil + RSI come in later phases.
+ * Multi-Agent Phase 3:
+ * Structure → Edge → Devil's Advocate → Risk → Synthesis
  */
 
-import { runStructureAgent, inferSetupType, gradeFromStructure, ICT_CORE_VERSION } from './ictCore'
+import {
+  runStructureAgent,
+  inferSetupType,
+  ICT_CORE_VERSION,
+} from './ictCore'
+import { runEdgeAgent, combinedScore, EDGE_MODEL_VERSION } from './edgeEngine'
+import { runDevilAgent, applyDevilPenalty } from './devilAgent'
 import { calcPositionSize, getRemainingDailyDD, getOverallDD } from './risk'
-import type { ICTStructureInput, SynthesisOutput, DetectedSetup } from '../types/ict'
+import type {
+  ICTStructureInput,
+  SynthesisOutput,
+  DetectedSetup,
+  Grade,
+  StructureAgentOutput,
+  EdgeAgentOutput,
+  DevilAgentOutput,
+} from '../types/ict'
 import type { PropAccount, PersonalRules, DailyLog } from '../types'
 
 export function runRiskAgent(
@@ -14,7 +28,7 @@ export function runRiskAgent(
   dailyLog: DailyLog,
   _structureScore: number,
   stopDistance: number,
-  gradeHint: 'A' | 'B' | 'C' | 'D'
+  gradeHint: Grade
 ) {
   const risk = getRemainingDailyDD(account, personal, dailyLog)
   const overallDD = getOverallDD(account)
@@ -44,14 +58,12 @@ export function runRiskAgent(
     }
   }
 
-  // Scale risk by grade quality
   let riskPct = personal.riskPerTrade
   if (gradeHint === 'A') riskPct = personal.riskPerTrade
   else if (gradeHint === 'B') riskPct = personal.riskPerTrade * 0.65
   else if (gradeHint === 'C') riskPct = personal.riskPerTrade * 0.35
   else riskPct = 0
 
-  // Cap by remaining personal daily room
   const maxFromDaily = risk.remainingPersonalPct * 0.8
   riskPct = Math.min(riskPct, maxFromDaily)
   if (riskPct < 0.15) {
@@ -81,20 +93,65 @@ export function runRiskAgent(
   }
 }
 
-/**
- * Full Phase-1 pipeline: Structure → provisional grade → Risk → final Synthesis
- */
+function gradeFinal(
+  structure: StructureAgentOutput,
+  edge: EdgeAgentOutput,
+  devil: DevilAgentOutput,
+  riskApproved: boolean,
+  rrRatio: number,
+  finalScore: number
+): Grade {
+  if (!riskApproved) return 'D'
+  if (devil.veto) return 'D'
+  if (!structure.inKillZone) return 'D'
+  if (!structure.sweepValid || !structure.mssValid) return 'D'
+  if (!structure.fvgValid && !structure.displacementValid) return 'D'
+  if (edge.expectancy < 0) return 'D'
+
+  if (
+    finalScore >= 78 &&
+    structure.oteBonus &&
+    rrRatio >= 2 &&
+    edge.expectancy >= 0.45 &&
+    devil.flags.filter((f) => f.severity === 'high').length === 0
+  )
+    return 'A'
+  if (finalScore >= 60 && structure.fvgValid && edge.expectancy >= 0.25) return 'B'
+  if (finalScore >= 42 && edge.expectancy >= 0) return 'C'
+  return 'D'
+}
+
 export function runPhase1Pipeline(
   input: ICTStructureInput,
   account: PropAccount,
   personal: PersonalRules,
   dailyLog: DailyLog
 ): SynthesisOutput {
+  // 1. Structure
   const structure = runStructureAgent(input)
   const setupType = inferSetupType(structure, input.killZone)
 
-  // Provisional grade ignoring risk (for risk sizing)
-  const provisionalGrade = gradeFromStructure(structure, true, input.rrRatio)
+  // 2. Edge
+  const edge = runEdgeAgent(input, structure, setupType)
+  let score = combinedScore(
+    structure.structureScore,
+    edge.edgeScore,
+    edge.expectancy
+  )
+
+  // 3. Devil's Advocate
+  const devil = runDevilAgent(input, structure, edge, setupType)
+  score = applyDevilPenalty(score, devil.totalPenalty)
+
+  // 4. Risk (uses provisional grade without risk veto)
+  const provisionalGrade = gradeFinal(
+    structure,
+    edge,
+    devil,
+    true,
+    input.rrRatio,
+    score
+  )
   const risk = runRiskAgent(
     account,
     personal,
@@ -104,54 +161,70 @@ export function runPhase1Pipeline(
     provisionalGrade
   )
 
-  const grade = gradeFromStructure(structure, risk.approved, input.rrRatio)
+  // 5. Synthesis
+  const grade = gradeFinal(
+    structure,
+    edge,
+    devil,
+    risk.approved,
+    input.rrRatio,
+    score
+  )
 
   let decision: 'take' | 'skip' | 'blocked' = 'skip'
   if (!risk.approved) decision = 'blocked'
+  else if (devil.veto) decision = 'skip'
   else if (grade === 'A' || grade === 'B') decision = 'take'
   else decision = 'skip'
 
-  const reasons = [...structure.present]
-  const warnings = [...structure.missing]
+  const reasons = [
+    ...structure.present,
+    ...edge.conditionBoosts.filter((b) => b.includes('+')),
+  ]
+  const warnings = [
+    ...structure.missing,
+    ...edge.conditionBoosts.filter((b) => b.includes('−') || b.includes('-')),
+    ...devil.flags.map((f) => `[${f.severity}] ${f.message}`),
+  ]
   if (risk.blockedReason) warnings.push(risk.blockedReason)
 
   let advice = ''
   if (decision === 'blocked') {
     advice = `Risk Guardian veto: ${risk.blockedReason}. Tidak boleh diambil.`
+  } else if (devil.veto) {
+    advice = `Devil's Advocate veto: ${devil.summary}. Thesis diruntuhkan — SKIP.`
   } else if (grade === 'A') {
-    advice =
-      'ICT Core lengkap + session kuat. Setup berkualitas tinggi. Boleh diambil dengan risk penuh sesuai plan.'
+    advice = `Semua agent setuju. ICT Core + edge kuat (E[R] ${edge.expectancy}) + devil bersih. TAKE dengan risk penuh.`
   } else if (grade === 'B') {
-    advice =
-      'Core terpenuhi. Ada sedikit kekurangan confluence. Size lebih kecil atau tunggu refine.'
+    advice = `Core + edge cukup, ada catatan devil (${devil.attackCount} flags). Size lebih kecil atau refine.`
   } else if (grade === 'C') {
-    advice = 'Struktur lemah / kurang konfluensi. Disarankan SKIP.'
+    advice = `Marginal. Devil: ${devil.summary}. Disarankan SKIP.`
   } else {
     advice =
-      'Tidak memenuhi ICT Core (Kill Zone / Sweep / MSS / FVG). JANGAN diambil.'
+      edge.expectancy < 0
+        ? `Expectancy negatif + devil attack. JANGAN diambil.`
+        : 'Tidak lolos filter multi-agent. JANGAN diambil.'
   }
-
-  const entryHint = structure.fvgValid
-    ? 'Limit di FVG (prefer CE / midpoint)'
-    : 'Tunggu FVG atau OB yang jelas'
-  const stopHint =
-    structure.sweepValid
-      ? 'Di balik extreme sweep (+ buffer kecil)'
-      : 'Di balik structure invalidation'
-  const targetHint = 'Opposing liquidity (minimal 1:2 R:R)'
 
   return {
     grade,
     setupType,
     decision,
     structure,
+    edge,
+    devil,
     risk,
+    combinedScore: score,
     reasons,
     warnings,
     advice,
-    entryHint,
-    stopHint,
-    targetHint,
+    entryHint: structure.fvgValid
+      ? 'Limit di FVG (prefer CE / midpoint)'
+      : 'Tunggu FVG atau OB yang jelas',
+    stopHint: structure.sweepValid
+      ? 'Di balik extreme sweep (+ buffer kecil)'
+      : 'Di balik structure invalidation',
+    targetHint: 'Opposing liquidity (minimal 1:2 R:R)',
   }
 }
 
@@ -168,6 +241,8 @@ export function createDetectedSetup(
     killZone: input.killZone,
     grade: synthesis.grade,
     structureScore: synthesis.structure.structureScore,
+    edgeScore: synthesis.edge.edgeScore,
+    expectancy: synthesis.edge.expectancy,
     decision: synthesis.decision,
     synthesis,
     status: synthesis.decision === 'take' ? 'detected' : 'skipped',
@@ -175,4 +250,4 @@ export function createDetectedSetup(
   }
 }
 
-export { ICT_CORE_VERSION }
+export { ICT_CORE_VERSION, EDGE_MODEL_VERSION }

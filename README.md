@@ -1,46 +1,30 @@
 # Prop Guardian RSI
 
-AI Trader Profesional berbasis **ICT Core** + **Prop Risk Guardian** dengan fondasi Recursive Self-Improvement.
+AI Trader Profesional — ICT Core + Historical Edge + Devil's Advocate + Prop Risk.
 
-## Phase 1 (saat ini)
+## Phase 3 (saat ini)
 
-- ICT Core Rules (Kill Zone, Sweep, Displacement, MSS, FVG, Premium/Discount, OTE)
-- Structure Agent (checklist ketat)
-- Risk Agent / Prop Guardian (veto power)
-- Synthesis → Grade A/B/C/D + decision take/skip/blocked
-- Detected setups tersimpan (siap untuk RSI Phase 2+)
+Pipeline:
 
-## Tech
-
-- React 19 + TypeScript + Vite
-- Zustand (persist)
-- Tailwind CSS 4
-
-## Local
-
-```bash
-npm install
-npm run dev
+```
+Structure → Edge → Devil's Advocate → Risk → Synthesis
 ```
 
-## Deploy (GitHub → Vercel)
+- **Structure Agent** — ICT Core checklist ketat
+- **Edge Agent** — historical expectancy / WR
+- **Devil's Advocate** — sengaja meruntuhkan thesis (critical → veto)
+- **Risk Agent** — Prop Guardian veto
+- Combined score + grade A/B/C/D
 
-Push repo → Import di Vercel → Framework Vite → Output `dist`
+## Deploy
 
-## ICT Core Checklist (Grade A butuh)
-
-1. Kill Zone (London / NY AM / Silver Bullet)
-2. Liquidity Sweep (BSL/SSL)
-3. Displacement
-4. MSS / CHoCH
-5. Fair Value Gap
-6. Premium (short) / Discount (long)
-7. OTE bonus (0.62–0.79)
-8. R:R ≥ 2
-9. Risk Guardian approve
+```bash
+git add .
+git commit -m "Phase 3: Devil's Advocate agent"
+git push
+```
 
 ## Roadmap
 
-- Phase 2: Historical Statistical Engine + Edge Agent
-- Phase 3: Devil’s Advocate + full Multi-Agent
-- Phase 4: RSI (episode tracking, feature weights, model versioning)
+- Phase 4: Recursive Self-Improvement (episodes, weights, model versioning)
+- Live OHLC detection
