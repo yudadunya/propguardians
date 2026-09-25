@@ -3,6 +3,7 @@ import { useStore } from '../hooks/useStore'
 import { runPhase1Pipeline, createDetectedSetup } from '../lib/agents'
 import { KILL_ZONES } from '../lib/ictCore'
 import { detectICTPattern, generateDemoCandles } from '../lib/patternDetector'
+import { fetchOhlc } from '../lib/marketData'
 import type { ICTStructureInput, KillZone, SweepType, SynthesisOutput } from '../types/ict'
 import type { SetupAnalysis } from '../types'
 
@@ -47,6 +48,52 @@ export default function Analyzer() {
   const [form, setForm] = useState(defaultForm)
   const [result, setResult] = useState<SynthesisOutput | null>(null)
   const [scanNotes, setScanNotes] = useState<string[]>([])
+  const [scanning, setScanning] = useState(false)
+  const [scanError, setScanError] = useState<string | null>(null)
+
+  async function scanLive() {
+    setScanning(true)
+    setScanError(null)
+    setResult(null)
+    try {
+      const { candles, sourceSymbol, interval } = await fetchOhlc(
+        form.instrument,
+        form.timeframe,
+        120
+      )
+      const pattern = detectICTPattern(candles, form.instrument, form.timeframe)
+      if (!pattern) {
+        setScanNotes(['Scan live: pattern tidak terdeteksi (data kurang)'])
+        setScanning(false)
+        return
+      }
+      setForm((f) => ({
+        ...f,
+        direction: pattern.direction,
+        killZone: pattern.killZone,
+        hasLiquiditySweep: pattern.hasLiquiditySweep,
+        sweepType: pattern.sweepType,
+        hasDisplacement: pattern.hasDisplacement,
+        hasMSS: pattern.hasMSS,
+        hasFVG: pattern.hasFVG,
+        fvgPartiallyFilled: pattern.fvgPartiallyFilled,
+        inPremium: pattern.inPremium,
+        inDiscount: pattern.inDiscount,
+        inOTE: pattern.inOTE,
+        stopDistance: pattern.stopDistance,
+        rrRatio: pattern.rrRatio,
+      }))
+      setScanNotes([
+        `LIVE ${sourceSymbol} ${interval} · ${candles.length} bars (biquote)`,
+        ...pattern.notes,
+      ])
+    } catch (e) {
+      setScanError(e instanceof Error ? e.message : 'Gagal fetch biquote')
+      setScanNotes([])
+    } finally {
+      setScanning(false)
+    }
+  }
 
   function scanDemo() {
     const candles = generateDemoCandles(form.instrument)
@@ -116,7 +163,7 @@ export default function Analyzer() {
       <div>
         <h2 className="text-2xl font-bold">ICT Core Analyzer</h2>
         <p className="text-slate-400 text-sm mt-1">
-          Phase 5 — Auto Pattern + Multi-Agent + RSI · Model {rsiModelVersion}
+          Phase 6 — Live biquote + Pattern + Multi-Agent + RSI · Model {rsiModelVersion}
         </p>
         <p className="text-slate-500 text-xs mt-1">
           Scan OHLC (demo) mengisi struktur otomatis. Bias/sweep di-infer sistem — bukan input manual.
@@ -246,19 +293,34 @@ export default function Analyzer() {
         <div className="flex flex-col sm:flex-row gap-2 mt-2">
           <button
             type="button"
-            onClick={scanDemo}
-            className="flex-1 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 rounded-lg font-medium text-sm transition-colors"
+            onClick={scanLive}
+            disabled={scanning}
+            className="flex-1 px-4 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors"
           >
-            Scan OHLC (Demo)
+            {scanning ? 'Scanning…' : 'Scan Live (biquote)'}
+          </button>
+          <button
+            type="button"
+            onClick={scanDemo}
+            disabled={scanning}
+            className="flex-1 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors"
+          >
+            Scan Demo
           </button>
           <button
             type="button"
             onClick={run}
-            className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium text-sm transition-colors"
+            disabled={scanning}
+            className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors"
           >
             Run Multi-Agent
           </button>
         </div>
+        {scanError && (
+          <div className="text-xs text-red-400 bg-red-950/40 border border-red-500/30 rounded-lg p-3">
+            {scanError}
+          </div>
+        )}
         {scanNotes.length > 0 && (
           <div className="text-xs text-sky-300/90 bg-sky-950/30 border border-sky-500/20 rounded-lg p-3 space-y-1">
             <div className="font-medium text-sky-400">Pattern Detector</div>
