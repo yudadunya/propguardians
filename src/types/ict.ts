@@ -1,4 +1,4 @@
-/** ICT Core Types — Prop Guardian RSI */
+/** ICT Core Types — Prop Guardian */
 
 export type KillZone = 'london' | 'ny_am' | 'silver_bullet' | 'ny_pm' | 'outside'
 export type SweepType = 'bsl' | 'ssl' | 'none'
@@ -15,6 +15,11 @@ export type SetupStatus =
   | 'expired'
   | 'skipped'
 
+/**
+ * Full ICT structure input fed to the multi-agent pipeline.
+ * Optional fields (?) carry the richer context from patternDetector v2.
+ * They degrade gracefully — agents check presence before using.
+ */
 export interface ICTStructureInput {
   instrument: string
   timeframe: string
@@ -24,13 +29,23 @@ export interface ICTStructureInput {
   sweepType: SweepType
   hasDisplacement: boolean
   hasMSS: boolean
+  /** true = actual CHoCH close beyond level; false = displacement-inferred only */
+  mssStrong?: boolean
   hasFVG: boolean
   fvgPartiallyFilled: boolean
   inPremium: boolean
   inDiscount: boolean
   inOTE: boolean
+  /** Precise OTE 62% level (for UI display and agent evaluation) */
+  ote62?: number | null
+  /** Precise OTE 79% level */
+  ote79?: number | null
   stopDistance: number
   rrRatio: number
+  /** Actual wick extreme of sweep candle — the real stop reference */
+  sweepExtreme?: number | null
+  /** Average True Range of the scanned series — for position sizing calibration */
+  avgAtr?: number
 }
 
 export interface StructureAgentOutput {
@@ -39,6 +54,8 @@ export interface StructureAgentOutput {
   sweepValid: boolean
   sweepType: SweepType
   mssValid: boolean
+  /** Indicates if MSS was a hard CHoCH (close beyond level) vs soft inference */
+  mssStrong: boolean
   displacementValid: boolean
   fvgValid: boolean
   premiumDiscountOk: boolean

@@ -93,16 +93,21 @@ export default function Analyzer() {
         direction: multi.direction,
         killZone: pattern.killZone,
         hasLiquiditySweep: pattern.hasLiquiditySweep,
-        sweepType: pattern.sweepType,
+        sweepType: pattern.sweepType,      // ← use detected sweep type (BSL/SSL)
         hasDisplacement: pattern.hasDisplacement,
         hasMSS: pattern.hasMSS,
+        mssStrong: pattern.mssStrong,      // ← hard CHoCH vs inferred
         hasFVG: pattern.hasFVG,
         fvgPartiallyFilled: pattern.fvgPartiallyFilled,
-        inPremium: pattern.inPremium,
+        inPremium: pattern.inPremium,      // ← detected P/D — don't override
         inDiscount: pattern.inDiscount,
         inOTE: pattern.inOTE,
+        ote62: pattern.ote62,
+        ote79: pattern.ote79,
         stopDistance: pattern.stopDistance,
         rrRatio: pattern.rrRatio,
+        sweepExtreme: pattern.sweepExtreme,
+        avgAtr: pattern.avgAtr,
       }
       setForm(nextForm)
       setScanNotes([
@@ -111,17 +116,8 @@ export default function Analyzer() {
         ...multi.notes,
       ])
 
-      const inferredSweep = !nextForm.hasLiquiditySweep
-        ? 'none'
-        : nextForm.direction === 'long'
-          ? 'ssl'
-          : 'bsl'
-      const input = {
-        ...nextForm,
-        sweepType: inferredSweep as typeof nextForm.sweepType,
-        inDiscount: nextForm.direction === 'long',
-        inPremium: nextForm.direction === 'short',
-      }
+      // Use detected sweep/PD values — no override (AI already computed them correctly)
+      const input = { ...nextForm }
       const synthesis = runPhase1Pipeline(
         input,
         account,
@@ -188,13 +184,18 @@ export default function Analyzer() {
         sweepType: pattern.sweepType,
         hasDisplacement: pattern.hasDisplacement,
         hasMSS: pattern.hasMSS,
+        mssStrong: pattern.mssStrong,
         hasFVG: pattern.hasFVG,
         fvgPartiallyFilled: pattern.fvgPartiallyFilled,
         inPremium: pattern.inPremium,
         inDiscount: pattern.inDiscount,
         inOTE: pattern.inOTE,
+        ote62: pattern.ote62,
+        ote79: pattern.ote79,
         stopDistance: pattern.stopDistance,
         rrRatio: pattern.rrRatio,
+        sweepExtreme: pattern.sweepExtreme,
+        avgAtr: pattern.avgAtr,
       }))
       setScanNotes([
         `LIVE ${sourceSymbol} ${interval} · ${candles.length} bars (biquote)`,
@@ -228,13 +229,18 @@ export default function Analyzer() {
       sweepType: pattern.sweepType,
       hasDisplacement: pattern.hasDisplacement,
       hasMSS: pattern.hasMSS,
+      mssStrong: pattern.mssStrong,
       hasFVG: pattern.hasFVG,
       fvgPartiallyFilled: pattern.fvgPartiallyFilled,
       inPremium: pattern.inPremium,
       inDiscount: pattern.inDiscount,
       inOTE: pattern.inOTE,
+      ote62: pattern.ote62,
+      ote79: pattern.ote79,
       stopDistance: pattern.stopDistance,
       rrRatio: pattern.rrRatio,
+      sweepExtreme: pattern.sweepExtreme,
+      avgAtr: pattern.avgAtr,
     }))
     setScanNotes(
       pattern.notes.length
@@ -245,17 +251,21 @@ export default function Analyzer() {
   }
 
   function run() {
-    // AI bias: direction determines sweep type (SSL→long, BSL→short). User never picks sweep manually.
-    const inferredSweep: SweepType = !form.hasLiquiditySweep
-      ? 'none'
-      : form.direction === 'long'
-        ? 'ssl'
-        : 'bsl'
+    // Manual run: infer sweep from direction (user-controlled form)
+    // For AI scans, sweepType is already set correctly by patternDetector.
+    const inferredSweep: SweepType =
+      form.sweepType && form.sweepType !== 'none'
+        ? form.sweepType  // keep AI-detected sweep type
+        : !form.hasLiquiditySweep
+          ? 'none'
+          : form.direction === 'long' ? 'ssl' : 'bsl'
     const input: ICTStructureInput = {
       ...form,
       sweepType: inferredSweep,
-      inDiscount: form.direction === 'long',
-      inPremium: form.direction === 'short',
+      // For manual form: force PD based on direction.
+      // For AI-scanned form: inDiscount/inPremium already correct from detector.
+      inDiscount: form.inDiscount || form.direction === 'long',
+      inPremium:  form.inPremium  || form.direction === 'short',
     }
     const synthesis = runPhase1Pipeline(input, account, personalRules, dailyLog, featureWeights)
     setResult(synthesis)
