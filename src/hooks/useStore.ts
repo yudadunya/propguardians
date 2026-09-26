@@ -12,6 +12,8 @@ import {
   type ModelVersion,
   RSI_VERSION,
 } from '../lib/rsiEngine'
+import type { TelegramConfig } from '../lib/telegramAlert'
+import type { ScannerConfig } from '../lib/autoScanner'
 
 interface Store extends AppState {
   featureWeights: FeatureWeights
@@ -19,9 +21,13 @@ interface Store extends AppState {
   modelVersions: ModelVersion[]
   rsiModelVersion: string
   lastRsiSummary: string | null
+  telegramConfig: TelegramConfig
+  scannerConfig: ScannerConfig
   updateAccount: (field: string, value: unknown) => void
   updatePersonal: (field: string, value: unknown) => void
   updatePlan: (field: string, value: unknown) => void
+  updateTelegram: (patch: Partial<TelegramConfig>) => void
+  updateScanner: (patch: Partial<ScannerConfig>) => void
   addTrade: (trade: Trade) => void
   addAnalysis: (analysis: SetupAnalysis) => void
   addDetectedSetup: (setup: DetectedSetup) => void
@@ -73,6 +79,20 @@ const defaultState = {
   modelVersions: [] as ModelVersion[],
   rsiModelVersion: RSI_VERSION,
   lastRsiSummary: null as string | null,
+  telegramConfig: {
+    botToken:    '',
+    chatId:      '',
+    enabled:     false,
+    alertGrades: ['A', 'B'] as ('A' | 'B')[],
+  },
+  scannerConfig: {
+    enabled:         false,
+    intervalMinutes: 15,
+    instruments:     ['XAUUSD', 'NAS100', 'EURUSD'],
+    alertGrades:     ['A', 'B'] as ('A' | 'B')[],
+    onlyInKillZone:  true,
+    cooldownMinutes: 30,
+  },
   dailyLog: {
     date: new Date().toISOString().slice(0, 10),
     startingEquity: 100000,
@@ -95,6 +115,12 @@ export const useStore = create<Store>()(
 
       updatePlan: (field, value) =>
         set((s) => ({ plan: { ...s.plan, [field]: value } })),
+
+      updateTelegram: (patch) =>
+        set((s) => ({ telegramConfig: { ...s.telegramConfig, ...patch } })),
+
+      updateScanner: (patch) =>
+        set((s) => ({ scannerConfig: { ...s.scannerConfig, ...patch } })),
 
       addTrade: (trade) => {
         const s = get()
@@ -255,6 +281,6 @@ export const useStore = create<Store>()(
         }
       },
     }),
-    { name: 'prop-guardian-storage-v4' }
+    { name: 'prop-guardian-storage-v5' }
   )
 )
