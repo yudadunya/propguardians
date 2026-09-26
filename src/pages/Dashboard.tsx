@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useStore } from '../hooks/useStore'
 import { getRemainingDailyDD, getOverallDD } from '../lib/risk'
+import { LivePriceGrid } from '../components/LivePriceTicker'
 
 function StatCard({
   label,
@@ -52,14 +53,17 @@ function GradeBadge({ grade }: { grade: string }) {
 
 export default function Dashboard() {
   const state = useStore()
-  const { account, personalRules, dailyLog, analyses, ensureDailyLog } = state
+  const { account, personalRules, dailyLog, plan, analyses, ensureDailyLog } = state
 
   useEffect(() => {
     ensureDailyLog()
   }, [ensureDailyLog])
 
-  const risk = getRemainingDailyDD(account, personalRules, dailyLog)
+  const risk     = getRemainingDailyDD(account, personalRules, dailyLog)
   const overallDD = getOverallDD(account)
+
+  // Instruments to show live prices for (from trading plan + extras)
+  const watchSymbols = [...new Set([...plan.instruments, 'EURUSD'])]
 
   return (
     <div className="space-y-6">
@@ -72,6 +76,12 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* ── Live Market Prices ───────────────────────────────────────── */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+        <LivePriceGrid symbols={watchSymbols} />
+      </div>
+
+      {/* ── Risk Stats ───────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard
           label="Balance"
@@ -99,6 +109,7 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* ── Session Counters ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-slate-800/80 border border-slate-700 rounded-xl p-5">
           <div className="text-sm text-slate-400 mb-2">Trades Hari Ini</div>
@@ -141,6 +152,7 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ── Recent Analyses ──────────────────────────────────────────── */}
       <div className="bg-slate-800/80 border border-slate-700 rounded-xl p-5">
         <h3 className="font-semibold mb-3">Recent Analyses</h3>
         {analyses.length === 0 ? (

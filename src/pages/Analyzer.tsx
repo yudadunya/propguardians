@@ -7,6 +7,7 @@ import { fetchOhlc } from '../lib/marketData'
 import { fetchMultiTf, analyzeMultiTf } from '../lib/multiTf'
 import { notifyGrade, ensureNotificationPermission } from '../lib/alerts'
 import { getScheduleStatus, formatNyTime, selectAiTimeframe } from '../lib/killZoneSchedule'
+import { InlinePrice } from '../components/LivePriceTicker'
 import type { ICTStructureInput, KillZone, SweepType, SynthesisOutput } from '../types/ict'
 import type { SetupAnalysis } from '../types'
 
@@ -383,7 +384,10 @@ export default function Analyzer() {
       <div className="bg-slate-800/80 border border-slate-700 rounded-xl p-5 space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-xs text-slate-400">Instrument</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-slate-400">Instrument</label>
+              <InlinePrice symbol={form.instrument} />
+            </div>
             <select
               className="w-full mt-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm"
               value={form.instrument}
