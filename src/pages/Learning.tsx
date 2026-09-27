@@ -4,7 +4,8 @@
 
 import { useState, useRef } from 'react'
 import { useStore } from '../hooks/useStore'
-import { runMultiBacktest, type MultiBtResult, type BtBreakdown, type BtResult } from '../lib/backtestEngine'
+import { runMultiBacktest, runBacktestOnCandles, type MultiBtResult, type BtBreakdown, type BtResult } from '../lib/backtestEngine'
+import { parseMT5CSV, type ImportResult } from '../lib/mt5Import'
 import { ensureNotificationPermission } from '../lib/alerts'
 
 /* ─── Small helpers ─── */
@@ -191,10 +192,67 @@ export default function Learning() {
   const [applied,     setApplied]     = useState(false)
   const progressRef = useRef<HTMLDivElement>(null)
 
+  /* MT5 Import state */
+  const [imported,       setImported]       = useState<ImportResult | null>(null)
+  const [importInstrument, setImportInstrument] = useState('')
+  const [csvRunning,     setCsvRunning]     = useState(false)
+  const [csvProgress,    setCsvProgress]    = useState<string[]>([])
+  const [csvResult,      setCsvResult]      = useState<BtResult | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   function toggleInstrument(sym: string) {
     setInstruments(cur =>
       cur.includes(sym) ? cur.filter(s => s !== sym) : [...cur, sym]
     )
+  }
+
+  /* ── MT5 CSV handlers ── */
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string
+      const result = parseMT5CSV(text, file.name)
+      setImported(result)
+      setImportInstrument(result.instrument)
+      setCsvResult(null)
+      setCsvProgress([])
+    }
+    reader.readAsText(file)
+  }
+
+  async function handleCsvBacktest() {
+    if (!imported) return
+    const sym = importInstrument.trim() || 'CUSTOM'
+    setCsvRunning(true)
+    setCsvProgress([])
+    setCsvResult(null)
+    try {
+      const msgs: string[] = []
+      const log = (m: string) => {
+        msgs.push(m)
+        setCsvProgress([...msgs])
+      }
+      log(`Import: ${imported.validCandles} candles · ${imported.rawTimeframe} · ${imported.dateFrom} – ${imported.dateTo}`)
+      if (imported.h1Candles.length < 50) {
+        log('⚠ Terlalu sedikit H1 candle — hasil mungkin tidak representatif')
+      }
+      log(`Resampled: ${imported.h1Candles.length} H1 · ${imported.d1Candles.length} D1`)
+      log('Menjalankan ICT walk-forward scan…')
+      const result = await runBacktestOnCandles(
+        imported.d1Candles,
+        imported.h1Candles,
+        sym,
+        log,
+      )
+      setCsvResult(result)
+      log('✅ Selesai!')
+    } catch (err) {
+      setCsvProgress(p => [...p, `❌ ${err instanceof Error ? err.message : String(err)}`])
+    } finally {
+      setCsvRunning(false)
+    }
   }
 
   async function handleRunBacktest() {
@@ -370,6 +428,125 @@ export default function Learning() {
           </div>
         </div>
       )}
+
+      {/* ══ MT5 CSV Import ══ */}
+      <div className="bg-slate-800/80 border border-sky-500/30 rounded-xl p-5 space-y-4">
+        <div>
+          <div className="font-medium text-sky-300 text-lg">📂 Import CSV dari MT5</div>
+          <p className="text-xs text-slate-500 mt-1">
+            Export dari MetaTrader 5: Chart → klik kanan → Save As → CSV.
+            Mendukung M1, M5, M15, M30, H1, H4, D1. Data broker sendiri = lebih akurat dari biquote.
+          </p>
+        </div>
+
+        {/* How to export */}
+        <div className="bg-slate-900/60 rounded-lg p-3 text-xs text-slate-400 space-y-1">
+          <div className="font-semibold text-slate-300 mb-1">Cara Export dari MT5:</div>
+          <div>1. Buka MT5 → buka chart instrumen + timeframe yang mau ditest</div>
+          <div>2. Klik kanan di chart → <b>Save As Picture</b> bukan — cari <b>History Center</b></div>
+          <div>3. Atau: <b>Tools → History Center</b> → pilih simbol + TF → Export</div>
+          <div>4. Alternatif: di chart aktif, tekan <b>F2</b> → History Center → Download → Export</div>
+          <div className="text-slate-500 mt-1">
+            Rekomendasi: export H1 minimal 2 tahun ke belakang untuk hasil statistik yang valid.
+          </div>
+        </div>
+
+        {/* File upload */}
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.txt"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full py-3 border-2 border-dashed border-slate-600 hover:border-sky-500/60
+                       rounded-xl text-sm text-slate-400 hover:text-sky-300 transition-colors"
+          >
+            {imported ? `✅ ${imported.validCandles.toLocaleString()} candle dimuat` : '📁 Pilih File CSV MT5'}
+          </button>
+        </div>
+
+        {/* File preview */}
+        {imported && (
+          <div className="space-y-3">
+            <div className="bg-slate-900/60 rounded-lg p-3 text-xs space-y-1.5">
+              <div className="font-semibold text-slate-300 mb-2">📊 Info File</div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                <span className="text-slate-500">Timeframe terdeteksi</span>
+                <span className="text-sky-300 font-bold">{imported.rawTimeframe}</span>
+                <span className="text-slate-500">Total baris</span>
+                <span className="text-slate-200">{imported.totalRows.toLocaleString()}</span>
+                <span className="text-slate-500">Candle valid</span>
+                <span className="text-slate-200">{imported.validCandles.toLocaleString()}</span>
+                <span className="text-slate-500">Resampled H1</span>
+                <span className="text-slate-200">{imported.h1Candles.length.toLocaleString()} bar</span>
+                <span className="text-slate-500">Resampled D1</span>
+                <span className="text-slate-200">{imported.d1Candles.length.toLocaleString()} bar</span>
+                <span className="text-slate-500">Dari</span>
+                <span className="text-slate-200">{imported.dateFrom}</span>
+                <span className="text-slate-500">Sampai</span>
+                <span className="text-slate-200">{imported.dateTo}</span>
+              </div>
+            </div>
+
+            {/* Warnings */}
+            {imported.warnings.length > 0 && (
+              <div className="bg-amber-950/30 border border-amber-600/30 rounded-lg p-3 text-xs space-y-0.5">
+                {imported.warnings.map((w, i) => (
+                  <div key={i} className="text-amber-400">⚠ {w}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Instrument input */}
+            <div>
+              <label className="text-xs text-slate-400">Nama Instrumen</label>
+              <input
+                type="text"
+                placeholder="XAUUSD / EURUSD / NAS100 / dll"
+                className="w-full mt-1 bg-slate-900 border border-slate-600 rounded-lg
+                           px-3 py-2 text-sm font-mono uppercase"
+                value={importInstrument}
+                onChange={e => setImportInstrument(e.target.value.toUpperCase())}
+              />
+            </div>
+
+            {/* Run backtest */}
+            <button
+              onClick={handleCsvBacktest}
+              disabled={csvRunning || imported.h1Candles.length < 30}
+              className="w-full py-3 bg-sky-600 hover:bg-sky-500 disabled:opacity-40
+                         rounded-xl font-medium transition-colors text-sm"
+            >
+              {csvRunning
+                ? '⏳ Backtest berjalan…'
+                : `⚡ Backtest ${importInstrument || 'CUSTOM'} (${imported.h1Candles.length} H1 bar)`}
+            </button>
+
+            {/* Progress */}
+            {csvProgress.length > 0 && (
+              <div className="bg-slate-900/60 rounded-lg p-3 max-h-28 overflow-y-auto
+                              text-xs text-slate-400 space-y-0.5 font-mono">
+                {csvProgress.map((p, i) => <div key={i}>{p}</div>)}
+              </div>
+            )}
+
+            {/* CSV Backtest result */}
+            {csvResult && (
+              <div className="space-y-3">
+                <div className="text-sm font-semibold text-slate-300">Hasil Backtest CSV</div>
+                <InstrumentResult result={csvResult} />
+                <div className="bg-slate-900/50 rounded-lg p-3 text-xs text-slate-400 whitespace-pre-wrap font-mono">
+                  {csvResult.summary}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* ══ RSI Learning ══ */}
       <div className="bg-slate-800/80 border border-slate-700 rounded-xl p-5 space-y-3">
