@@ -1,140 +1,136 @@
-/** ICT Core Types — Prop Guardian */
+/** ICT Core Types — Prop Guardian v2 */
 
-export type KillZone = 'london' | 'ny_am' | 'silver_bullet' | 'ny_pm' | 'outside'
+import type { TopDownBias } from '../lib/topDown'
+import type { KeyLevels }   from '../lib/keyLevels'
+import type { NewsStatus }  from '../lib/newsFilter'
+
+export type KillZone  = 'london' | 'ny_am' | 'silver_bullet' | 'ny_pm' | 'outside'
 export type SweepType = 'bsl' | 'ssl' | 'none'
 export type Direction = 'long' | 'short'
 export type SetupType = 'sweep_mss_fvg' | 'silver_bullet' | 'unicorn' | 'other'
-export type Grade = 'A' | 'B' | 'C' | 'D'
+export type Grade     = 'A' | 'B' | 'C' | 'D'
 export type SetupStatus =
-  | 'detected'
-  | 'taken'
-  | 'hit_1r'
-  | 'hit_2r'
-  | 'hit_3r'
-  | 'stopped'
-  | 'expired'
-  | 'skipped'
+  | 'detected' | 'taken' | 'hit_1r' | 'hit_2r' | 'hit_3r'
+  | 'stopped'  | 'expired' | 'skipped'
 
-/**
- * Full ICT structure input fed to the multi-agent pipeline.
- * Optional fields (?) carry the richer context from patternDetector v2.
- * They degrade gracefully — agents check presence before using.
- */
 export interface ICTStructureInput {
-  instrument: string
-  timeframe: string
-  direction: Direction
-  killZone: KillZone
+  instrument:  string
+  timeframe:   string
+  direction:   Direction
+  killZone:    KillZone
   hasLiquiditySweep: boolean
-  sweepType: SweepType
-  hasDisplacement: boolean
-  hasMSS: boolean
-  /** true = actual CHoCH close beyond level; false = displacement-inferred only */
-  mssStrong?: boolean
-  hasFVG: boolean
+  sweepType:   SweepType
+  hasDisplacement:   boolean
+  hasMSS:      boolean
+  mssStrong?:  boolean
+  hasFVG:      boolean
   fvgPartiallyFilled: boolean
-  inPremium: boolean
-  inDiscount: boolean
-  inOTE: boolean
-  /** Precise OTE 62% level (for UI display and agent evaluation) */
-  ote62?: number | null
-  /** Precise OTE 79% level */
-  ote79?: number | null
+  inPremium:   boolean
+  inDiscount:  boolean
+  inOTE:       boolean
+  ote62?:      number | null
+  ote79?:      number | null
   stopDistance: number
-  rrRatio: number
-  /** Actual wick extreme of sweep candle — the real stop reference */
-  sweepExtreme?: number | null
-  /** Average True Range of the scanned series — for position sizing calibration */
-  avgAtr?: number
+  rrRatio:     number
+  sweepExtreme?:  number | null
+  sweepLevel?:    number | null
+  avgAtr?:     number
+  /** NEW: full top-down bias (D1+H4) */
+  topDown?:    TopDownBias | null
+  /** NEW: PDH/PDL/Asian range key levels */
+  keyLevels?:  KeyLevels | null
+  /** NEW: economic calendar news filter */
+  newsStatus?: NewsStatus | null
 }
 
 export interface StructureAgentOutput {
-  inKillZone: boolean
-  killZone: KillZone
-  sweepValid: boolean
-  sweepType: SweepType
-  mssValid: boolean
-  /** Indicates if MSS was a hard CHoCH (close beyond level) vs soft inference */
-  mssStrong: boolean
+  inKillZone:        boolean
+  killZone:          KillZone
+  sweepValid:        boolean
+  sweepType:         SweepType
+  mssValid:          boolean
+  mssStrong:         boolean
   displacementValid: boolean
-  fvgValid: boolean
+  fvgValid:          boolean
   premiumDiscountOk: boolean
-  oteBonus: boolean
-  structureScore: number
-  missing: string[]
-  present: string[]
-  summary: string
+  oteBonus:          boolean
+  topDownAligned:    boolean
+  keyLevelSweep:     boolean
+  structureScore:    number
+  missing:           string[]
+  present:           string[]
+  summary:           string
 }
 
 export interface RiskAgentOutput {
-  approved: boolean
-  blockedReason: string | null
+  approved:               boolean
+  blockedReason:          string | null
   recommendedRiskPercent: number
-  positionSize: number
-  remainingDailyPct: number
-  remainingMaxPct: number
+  positionSize:           number
+  remainingDailyPct:      number
+  remainingMaxPct:        number
 }
 
 export interface EdgeAgentOutput {
-  matched: boolean
-  setupType: SetupType
-  sampleSize: number
-  winrate2R: number
-  avgR: number
-  expectancy: number
-  edgeScore: number
-  confidence: 'high' | 'medium' | 'low'
+  matched:           boolean
+  setupType:         SetupType
+  sampleSize:        number
+  winrate2R:         number
+  avgR:              number
+  expectancy:        number
+  edgeScore:         number
+  confidence:        'high' | 'medium' | 'low'
   historicalSummary: string
-  conditionBoosts: string[]
-  modelVersion: string
+  conditionBoosts:   string[]
+  modelVersion:      string
 }
 
 export interface DevilFlag {
-  severity: 'critical' | 'high' | 'medium' | 'low'
-  code: string
-  message: string
+  severity:     'critical' | 'high' | 'medium' | 'low'
+  code:         string
+  message:      string
   scorePenalty: number
 }
 
 export interface DevilAgentOutput {
-  flags: DevilFlag[]
+  flags:       DevilFlag[]
   totalPenalty: number
-  veto: boolean
-  summary: string
+  veto:        boolean
+  summary:     string
   attackCount: number
 }
 
 export interface SynthesisOutput {
-  grade: Grade
-  setupType: SetupType
-  decision: 'take' | 'skip' | 'blocked'
-  structure: StructureAgentOutput
-  edge: EdgeAgentOutput
-  devil: DevilAgentOutput
-  risk: RiskAgentOutput
+  grade:         Grade
+  setupType:     SetupType
+  decision:      'take' | 'skip' | 'blocked'
+  structure:     StructureAgentOutput
+  edge:          EdgeAgentOutput
+  devil:         DevilAgentOutput
+  risk:          RiskAgentOutput
   combinedScore: number
-  reasons: string[]
-  warnings: string[]
-  advice: string
-  entryHint: string
-  stopHint: string
-  targetHint: string
+  reasons:       string[]
+  warnings:      string[]
+  advice:        string
+  entryHint:     string
+  stopHint:      string
+  targetHint:    string
 }
 
 export interface DetectedSetup {
-  id: string
-  instrument: string
-  timeframe: string
-  direction: Direction
-  setupType: SetupType
-  killZone: KillZone
-  grade: Grade
+  id:            string
+  instrument:    string
+  timeframe:     string
+  direction:     Direction
+  setupType:     SetupType
+  killZone:      KillZone
+  grade:         Grade
   structureScore: number
-  edgeScore: number
-  expectancy: number
-  decision: 'take' | 'skip' | 'blocked'
-  synthesis: SynthesisOutput
-  status: SetupStatus
-  detectedAt: string
-  actualR?: number
+  edgeScore:     number
+  expectancy:    number
+  decision:      'take' | 'skip' | 'blocked'
+  synthesis:     SynthesisOutput
+  status:        SetupStatus
+  detectedAt:    string
+  actualR?:      number
 }

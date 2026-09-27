@@ -9,6 +9,9 @@ import { notifyGrade, ensureNotificationPermission } from '../lib/alerts'
 import { getScheduleStatus, formatNyTime, selectAiTimeframe } from '../lib/killZoneSchedule'
 import { InlinePrice } from '../components/LivePriceTicker'
 import type { ICTStructureInput, KillZone, SweepType, SynthesisOutput } from '../types/ict'
+import type { TopDownBias } from '../lib/topDown'
+import type { KeyLevels } from '../lib/keyLevels'
+import type { NewsStatus } from '../lib/newsFilter'
 import type { SetupAnalysis } from '../types'
 
 function GradeBadge({ grade }: { grade: string }) {
@@ -54,6 +57,9 @@ export default function Analyzer() {
   const [scanNotes, setScanNotes] = useState<string[]>([])
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
+  const [topDown, setTopDown] = useState<TopDownBias | null>(null)
+  const [keyLevels, setKeyLevels] = useState<KeyLevels | null>(null)
+  const [newsStatus, setNewsStatus] = useState<NewsStatus | null>(null)
   const [schedule, setSchedule] = useState(() => getScheduleStatus())
   const [autopilot, setAutopilot] = useState(false)
   const [autoIntervalMin, setAutoIntervalMin] = useState(5)
@@ -68,16 +74,21 @@ export default function Analyzer() {
     setResult(null)
     try {
       await ensureNotificationPermission()
-      const { htfCandles, ltfCandles, entryTf, biasTf } = await fetchMultiTf(
+      const { d1Candles, h4Candles, htfCandles, ltfCandles, entryTf, biasTf } = await fetchMultiTf(
         form.instrument
       )
-      const multi = analyzeMultiTf(
+      const multi = await analyzeMultiTf(
         form.instrument,
+        d1Candles,
+        h4Candles,
         htfCandles,
         ltfCandles,
         biasTf,
         entryTf
       )
+      setTopDown(multi.topDown)
+      setKeyLevels(multi.keyLevels)
+      setNewsStatus(multi.newsStatus)
       const pattern = multi.merged
       if (!pattern.hasLiquiditySweep && !pattern.hasFVG) {
         setScanNotes([
@@ -117,7 +128,12 @@ export default function Analyzer() {
       ])
 
       // Use detected sweep/PD values — no override (AI already computed them correctly)
-      const input = { ...nextForm }
+      const input = {
+        ...nextForm,
+        topDown:    multi.topDown    ?? undefined,
+        keyLevels:  multi.keyLevels  ?? undefined,
+        newsStatus: multi.newsStatus ?? undefined,
+      }
       const synthesis = runPhase1Pipeline(
         input,
         account,
@@ -331,6 +347,99 @@ export default function Analyzer() {
           ICT Kill Zone menentukan kapan AI bekerja. Analyze Live = scan biquote + multi-agent (bias penuh AI).
         </p>
       </div>
+
+      {/* ── News Warning Banner ── */}
+      {newsStatus && newsStatus.recommendation !== 'clear' && (
+        <div className={`rounded-xl px-4 py-3 border text-sm flex items-start gap-2 ${
+          newsStatus.recommendation === 'avoid'
+            ? 'bg-red-950/40 border-red-500/50 text-red-300'
+            : 'bg-amber-950/30 border-amber-500/40 text-amber-300'
+        }`}>
+          <span className="text-lg mt-0.5">📰</span>
+          <div>
+            <span className="font-semibold">
+              {newsStatus.recommendation === 'avoid' ? 'NEWS WINDOW — JANGAN ENTRY' : 'NEWS CAUTION'}
+            </span>
+            <span className="ml-2 font-normal opacity-80">{newsStatus.reason}</span>
+            {newsStatus.upcomingEvents.slice(0, 2).map((e, i) => (
+              <div key={i} className="text-xs opacity-60 mt-0.5">• {e.event} ({e.country})</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Top-Down Bias Panel ── */}
+      {topDown && (
+        <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-slate-300">📊 Top-Down Bias (D1 + H4)</h3>
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+              topDown.alignment === 'strong_bull' ? 'bg-emerald-600/30 text-emerald-300' :
+              topDown.alignment === 'strong_bear' ? 'bg-red-600/30 text-red-300' :
+              topDown.alignment === 'conflicting' ? 'bg-red-900/40 text-red-400 border border-red-600' :
+              'bg-amber-600/20 text-amber-300'
+            }`}>
+              {topDown.alignment.replace('_', ' ').toUpperCase()}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            {[topDown.d1, topDown.h4].map((tf, i) => tf && (
+              <div key={i} className="bg-slate-900/60 rounded-lg p-3">
+                <div className="text-xs text-slate-500 mb-1">{tf.tf}</div>
+                <div className={`text-sm font-bold ${
+                  tf.structure === 'bullish' ? 'text-emerald-400' :
+                  tf.structure === 'bearish' ? 'text-red-400' : 'text-amber-400'
+                }`}>{tf.structure.toUpperCase()}</div>
+                <div className="text-xs text-slate-400 mt-0.5">{tf.zone}</div>
+                {tf.recentSweep && (
+                  <div className="text-xs text-emerald-500 mt-0.5">✅ Swept {tf.sweepSide}s</div>
+                )}
+                <div className="text-xs text-slate-500 mt-1">DOL: {tf.drawOn.replace('_', ' ')}</div>
+              </div>
+            ))}
+          </div>
+          <div className="text-xs text-slate-500">
+            Confluence: <span className={`font-medium ${
+              topDown.confluenceScore >= 80 ? 'text-emerald-400' :
+              topDown.confluenceScore >= 60 ? 'text-amber-400' : 'text-red-400'
+            }`}>{topDown.confluenceScore}/100</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Key Levels Panel ── */}
+      {keyLevels && (keyLevels.pdh || keyLevels.pwh || keyLevels.asianHigh) && (
+        <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-slate-300 mb-3">🎯 Key Levels</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+            {[
+              { label: 'PDH', val: keyLevels.pdh, swept: keyLevels.sweptPDH, type: 'high' },
+              { label: 'PDL', val: keyLevels.pdl, swept: keyLevels.sweptPDL, type: 'low'  },
+              { label: 'PWH', val: keyLevels.pwh, swept: keyLevels.sweptPWH, type: 'high' },
+              { label: 'PWL', val: keyLevels.pwl, swept: keyLevels.sweptPWL, type: 'low'  },
+              { label: 'Asian High', val: keyLevels.asianHigh, swept: keyLevels.sweptAsianHigh, type: 'high' },
+              { label: 'Asian Low',  val: keyLevels.asianLow,  swept: keyLevels.sweptAsianLow,  type: 'low'  },
+            ].filter(l => l.val !== null).map((l, i) => (
+              <div key={i} className={`px-2 py-1.5 rounded-lg border ${
+                l.swept
+                  ? 'bg-emerald-900/30 border-emerald-600/40'
+                  : 'bg-slate-900/40 border-slate-700'
+              }`}>
+                <div className="text-slate-500">{l.label}</div>
+                <div className={`font-mono font-medium ${
+                  l.type === 'high' ? 'text-red-300' : 'text-emerald-300'
+                }`}>{l.val?.toFixed(5)}</div>
+                {l.swept && <div className="text-emerald-500">✅ swept</div>}
+              </div>
+            ))}
+          </div>
+          {keyLevels.matchedLevel && (
+            <div className="mt-2 text-xs text-emerald-400 font-medium">
+              🎯 Sweep matches {keyLevels.matchedLevel} → +{keyLevels.matchedBonus} bonus score
+            </div>
+          )}
+        </div>
+      )}
 
       <div className={`rounded-xl p-4 border text-sm ${
         schedule.inKillZone

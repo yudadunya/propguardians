@@ -164,12 +164,12 @@ class AutoScannerService {
     for (const instrument of config.instruments) {
       try {
         /* ── Fetch candles ── */
-        const { htfCandles, ltfCandles, entryTf, biasTf } =
+        const { d1Candles, h4Candles, htfCandles, ltfCandles, entryTf, biasTf } =
           await fetchMultiTf(instrument)
 
-        /* ── Multi-TF analysis ── */
-        const multi = analyzeMultiTf(
-          instrument, htfCandles, ltfCandles, biasTf, entryTf,
+        /* ── Multi-TF analysis (now async) ── */
+        const multi = await analyzeMultiTf(
+          instrument, d1Candles, h4Candles, htfCandles, ltfCandles, biasTf, entryTf,
         )
         const pattern = multi.merged
 
@@ -177,12 +177,14 @@ class AutoScannerService {
         const synthesis = runPhase1Pipeline(
           {
             ...pattern,
-            // Ensure required fields for ICTStructureInput
             mssStrong:     pattern.mssStrong    ?? false,
             sweepExtreme:  pattern.sweepExtreme ?? null,
             ote62:         pattern.ote62        ?? null,
             ote79:         pattern.ote79        ?? null,
             avgAtr:        pattern.avgAtr       ?? 0,
+            topDown:       multi.topDown        ?? undefined,
+            keyLevels:     multi.keyLevels      ?? undefined,
+            newsStatus:    multi.newsStatus     ?? undefined,
           },
           account,
           personalRules,
