@@ -3,6 +3,7 @@ import { useStore } from '../hooks/useStore'
 import { testBotToken, sendTestMessage } from '../lib/telegramAlert'
 import { autoScanner, type ScannerStatus } from '../lib/autoScanner'
 import { sendSetupAlert } from '../lib/telegramAlert'
+import { getMT5BridgeURL, setMT5BridgeURL, testBridgeConnection } from '../lib/marketData'
 
 const INSTRUMENTS_ALL = ['XAUUSD', 'NAS100', 'EURUSD', 'GBPUSD', 'USDJPY', 'US30']
 const INTERVALS = [5, 10, 15, 30] as const
@@ -63,6 +64,27 @@ export default function Settings() {
     updateAccount, updatePersonal, updateTelegram, updateScanner,
     resetAll,
   } = useStore()
+
+  /* ── MT5 Bridge state ── */
+  const [bridgeUrl,    setBridgeUrl]    = useState(getMT5BridgeURL)
+  const [bridgeStatus, setBridgeStatus] = useState<{ ok: boolean; server?: string; account?: string; error?: string } | null>(null)
+  const [testingBridge, setTestingBridge] = useState(false)
+
+  /* ── MT5 Bridge handlers ── */
+  function handleSaveBridgeUrl() {
+    setMT5BridgeURL(bridgeUrl)
+    setBridgeStatus(null)
+  }
+
+  async function handleTestBridge() {
+    setTestingBridge(true)
+    setBridgeStatus(null)
+    const url = bridgeUrl.trim() || 'http://localhost:8765'
+    const res = await testBridgeConnection(url)
+    setBridgeStatus(res)
+    if (res.ok) setMT5BridgeURL(url)
+    setTestingBridge(false)
+  }
 
   /* ── Telegram test state ── */
   const [tokenStatus, setTokenStatus] = useState<{ ok: boolean; name?: string; error?: string } | null>(null)
@@ -242,6 +264,93 @@ export default function Settings() {
             <Label>Max Trades per Day</Label>
             <Input type="number" value={personalRules.maxTradesPerDay}
               onChange={v => updatePersonal('maxTradesPerDay', Number(v))} />
+          </div>
+        </div>
+      </div>
+
+      {/* ── MT5 Bridge ── */}
+      <div className="bg-slate-800/80 border border-emerald-500/30 rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-medium text-emerald-400">🔌 MT5 Bridge (Live Data)</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Data dari broker kamu sendiri. Lebih akurat dari biquote.io.
+              Jalankan <code>start.bat</code> di folder mt5-bridge dulu.
+            </p>
+          </div>
+          {bridgeStatus && (
+            <span className={`text-xs px-2 py-0.5 rounded-full ${
+              bridgeStatus.ok
+                ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
+                : 'bg-red-600/20 text-red-400 border border-red-500/30'
+            }`}>
+              {bridgeStatus.ok ? '● Connected' : '● Disconnected'}
+            </span>
+          )}
+        </div>
+
+        <div>
+          <Label>Bridge URL</Label>
+          <div className="flex gap-2 mt-1">
+            <input
+              type="text"
+              placeholder="http://localhost:8765"
+              className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm font-mono"
+              value={bridgeUrl}
+              onChange={e => { setBridgeUrl(e.target.value); setBridgeStatus(null) }}
+            />
+            <button
+              onClick={handleTestBridge}
+              disabled={testingBridge}
+              className="px-3 py-2 bg-emerald-700/40 hover:bg-emerald-700/60
+                         disabled:opacity-40 border border-emerald-600/40
+                         rounded-lg text-xs text-emerald-300 whitespace-nowrap transition-colors"
+            >
+              {testingBridge ? 'Testing…' : 'Test'}
+            </button>
+            <button
+              onClick={handleSaveBridgeUrl}
+              className="px-3 py-2 bg-slate-700 hover:bg-slate-600
+                         rounded-lg text-xs whitespace-nowrap transition-colors"
+            >
+              Save
+            </button>
+          </div>
+          {bridgeStatus && (
+            <div className={`mt-1.5 text-xs flex items-start gap-1.5 ${bridgeStatus.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+              <span>{bridgeStatus.ok ? '✅' : '❌'}</span>
+              <div>
+                {bridgeStatus.ok ? (
+                  <>
+                    <span className="font-medium">MT5 Connected</span>
+                    {bridgeStatus.server && <span className="text-slate-400 ml-1">· Server: {bridgeStatus.server}</span>}
+                    {bridgeStatus.account && <span className="text-slate-400 ml-1">· {bridgeStatus.account}</span>}
+                    <div className="text-slate-500 mt-0.5">
+                      Semua live scan akan memakai data dari broker ini
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span>Tidak bisa connect: {bridgeStatus.error}</span>
+                    <div className="text-slate-500 mt-0.5">
+                      Pastikan bridge.py sudah dijalankan dan MT5 terbuka
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Steps */}
+        <div className="bg-slate-900/60 rounded-lg p-3 text-xs text-slate-400 space-y-1">
+          <div className="font-semibold text-slate-300 mb-1.5">Cara Setup (sekali saja):</div>
+          <div className="flex gap-2"><span className="text-emerald-500 font-bold">1</span><span>Download folder <code>mt5-bridge</code> dari zip yang disertakan</span></div>
+          <div className="flex gap-2"><span className="text-emerald-500 font-bold">2</span><span>Buka MT5 → login ke akun trading kamu</span></div>
+          <div className="flex gap-2"><span className="text-emerald-500 font-bold">3</span><span>Double-click <code>start.bat</code> di folder mt5-bridge</span></div>
+          <div className="flex gap-2"><span className="text-emerald-500 font-bold">4</span><span>Klik <b>Test</b> di atas → harus muncul ✅ Connected</span></div>
+          <div className="text-slate-600 mt-1">
+            Kalau symbol tidak ditemukan, edit <code>SYMBOL_MAP</code> di <code>bridge.py</code> sesuai nama symbol di broker kamu.
           </div>
         </div>
       </div>
