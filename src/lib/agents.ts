@@ -114,21 +114,28 @@ function gradeFinal(
 
   const highSeverityFlags = devil.flags.filter(f => f.severity === 'high' || f.severity === 'critical')
 
-  // Grade A — all agents green + hard CHoCH confirmed
+  // Grade A — semua hijau + OTE + hard CHoCH + RR ≥ 3
+  // (backtest 8.5 tahun: hanya setup dengan OTE yang profitable)
   if (
     finalScore >= 78 &&
-    structure.oteBonus &&
-    structure.mssStrong &&       // ← must be hard CHoCH, not inferred
-    rrRatio >= 2 &&
-    edge.expectancy >= 0.45 &&
+    structure.oteBonus &&        // OTE WAJIB
+    structure.mssStrong &&       // hard CHoCH, bukan inferred
+    rrRatio >= 3 &&              // minimum 1:3 per backtest (breakeven ~1:3.3)
+    edge.expectancy >= 0.40 &&
     highSeverityFlags.length === 0
   ) return 'A'
 
-  // Grade B — solid setup, FVG present, decent edge
-  if (finalScore >= 60 && structure.fvgValid && edge.expectancy >= 0.25) return 'B'
+  // Grade B — OTE wajib + FVG + RR ≥ 2.5
+  if (
+    finalScore >= 60 &&
+    structure.oteBonus &&        // OTE tetap wajib di Grade B
+    structure.fvgValid &&
+    edge.expectancy >= 0.20 &&
+    rrRatio >= 2.5
+  ) return 'B'
 
-  // Grade C — marginal
-  if (finalScore >= 42 && edge.expectancy >= 0) return 'C'
+  // Grade C — OTE wajib, marginal
+  if (finalScore >= 42 && structure.oteBonus && edge.expectancy >= 0) return 'C'
 
   return 'D'
 }
@@ -183,26 +190,35 @@ export function runPhase1Pipeline(
     ...(risk.blockedReason ? [risk.blockedReason] : []),
   ]
 
-  // Advice copy
+  // Advice copy — reflects 8.5yr backtest findings
   let advice = ''
+  const noOteFlag   = !structure.oteBonus
+  const lowRrFlag   = input.rrRatio < 3
+
   if (decision === 'blocked') {
     advice = `Risk Guardian veto: ${risk.blockedReason}. Tidak boleh diambil.`
   } else if (devil.veto) {
     advice = `Devil's Advocate veto: ${devil.summary}. SKIP.`
+  } else if (noOteFlag) {
+    advice = `⛔ Tidak ada OTE. Backtest 8.5 tahun XAUUSD: WR@2R ≈ 0% tanpa OTE. HARD SKIP — tunggu price retrace ke 62–79% fib.`
+  } else if (lowRrFlag) {
+    advice = `⚠ R:R ${input.rrRatio.toFixed(1)}:1 di bawah minimum 1:3. Geser target ke opposing liquidity untuk dapat ≥1:3.`
   } else if (grade === 'A') {
     const mssNote = structure.mssStrong ? 'CHoCH hard confirmed.' : ''
-    advice = `Semua agent hijau. ICT Core lengkap. ${mssNote} TAKE full risk.`
+    advice = `✅ Grade A — OTE + semua agent hijau. ${mssNote} TAKE full risk, target 1:3 minimum.`
   } else if (grade === 'B') {
     const mssNote = !structure.mssStrong
-      ? ' CHoCH belum hard confirmed — pertimbangkan tunggu close di atas CHoCH level.'
+      ? ' Tunggu hard CHoCH sebelum entry.'
       : ''
-    advice = `Core + edge cukup, ada catatan devil.${mssNote} Size kecil atau refine entry.`
+    advice = `🔵 Grade B — OTE ada, core solid.${mssNote} Size 65%, target 1:3.`
   } else if (grade === 'C') {
-    advice = `Marginal. ${devil.summary}. Disarankan SKIP atau demo saja.`
+    advice = `🟡 Grade C — marginal. ${devil.summary}. Demo saja atau skip.`
   } else {
-    advice = edge.expectancy < 0
-      ? `Expectancy negatif (${edge.expectancy.toFixed(2)}). Statistically unfavorable. SKIP.`
-      : `Tidak lolos multi-agent filter. SKIP.`
+    advice = !structure.oteBonus
+      ? `OTE tidak ada — tunggu pullback ke 62–79% fib.`
+      : edge.expectancy < 0
+        ? `Expectancy negatif (${edge.expectancy.toFixed(2)}). SKIP.`
+        : `Tidak lolos filter. SKIP.`
   }
 
   // Entry / stop / target hints

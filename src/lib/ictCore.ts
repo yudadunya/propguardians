@@ -115,25 +115,30 @@ export function runStructureAgent(input: ICTStructureInput): StructureAgentOutpu
     score -= 5
   }
 
-  /* ── OTE 62–79% ── */
+  /* ── OTE 62–79% ── WAJIB per backtest 8.5 tahun (edge +72%pts) ── */
   const oteBonus = input.inOTE
   if (oteBonus) {
-    score += 12
+    score += 15
     const lvl = input.ote62 && input.ote79
       ? ` (${input.ote79.toFixed(5)}–${input.ote62.toFixed(5)})`
       : ''
-    present.push(`OTE 62–79% Fibonacci${lvl}`)
+    present.push(`OTE 62–79% Fibonacci${lvl} 🎯`)
   } else {
-    missing.push('Di luar OTE zone — entry kurang optimal')
+    // Backtest 8.5 tahun: WR@2R tanpa OTE ≈ 0% → penalty besar
+    score -= 25
+    missing.push('⛔ Tidak ada OTE 62–79% — backtest: WR@2R ~0% tanpa OTE. SKIP.')
   }
 
-  /* ── R:R ── */
-  if (input.rrRatio >= 2) {
-    score += 5
+  /* ── R:R minimum 1:3 per backtest ── */
+  if (input.rrRatio >= 3) {
+    score += 8
     present.push(`R:R ${input.rrRatio.toFixed(1)}:1 ✓`)
+  } else if (input.rrRatio >= 2) {
+    score += 2
+    missing.push(`R:R ${input.rrRatio.toFixed(1)} < 3 — target minimal 1:3 untuk profitable`)
   } else {
+    score -= 15
     missing.push(`R:R ${input.rrRatio.toFixed(1)} < 2 — minimum violated`)
-    score -= 12
   }
 
   /* ── Top-Down D1+H4 Bias ── */
@@ -206,14 +211,19 @@ export function gradeFromStructure(
   riskApproved: boolean,
   rrRatio:      number,
 ): Grade {
-  if (!riskApproved)                             return 'D'
-  if (!structure.inKillZone)                     return 'D'
-  if (!structure.sweepValid || !structure.mssValid) return 'D'
+  if (!riskApproved)                                       return 'D'
+  if (!structure.inKillZone)                               return 'D'
+  if (!structure.sweepValid || !structure.mssValid)        return 'D'
   if (!structure.fvgValid && !structure.displacementValid) return 'D'
+  // OTE WAJIB — backtest 8.5 tahun: tanpa OTE = losing strategy
+  if (!structure.oteBonus)                                 return 'D'
 
   const s = structure.structureScore
-  if (s >= 82 && structure.oteBonus && rrRatio >= 2 && structure.mssStrong) return 'A'
-  if (s >= 65 && structure.fvgValid)                                         return 'B'
-  if (s >= 45)                                                                return 'C'
+  // Grade A: semua hijau + hard CHoCH + RR ≥ 3
+  if (s >= 82 && structure.mssStrong && rrRatio >= 3) return 'A'
+  // Grade B: solid + OTE + RR ≥ 2.5
+  if (s >= 65 && structure.fvgValid  && rrRatio >= 2.5) return 'B'
+  // Grade C: marginal, OTE sudah dicheck di atas
+  if (s >= 45) return 'C'
   return 'D'
 }

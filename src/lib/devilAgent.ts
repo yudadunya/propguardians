@@ -120,11 +120,13 @@ export function runDevilAgent(
     })
   }
 
-  if (input.rrRatio < 2) {
+  // RR < 3: critical kalau < 2, high kalau 2–3
+  if (input.rrRatio < 3) {
     flags.push({
-      severity: 'high', code: 'LOW_RR',
-      message: `R:R ${input.rrRatio.toFixed(1)}:1 di bawah minimum 1:2`,
-      scorePenalty: 15,
+      severity: input.rrRatio < 2 ? 'critical' : 'high',
+      code: 'LOW_RR',
+      message: `R:R ${input.rrRatio.toFixed(1)}:1 di bawah minimum 1:3 — backtest: butuh ≥1:3 untuk profitable`,
+      scorePenalty: input.rrRatio < 2 ? 20 : 12,
     })
   }
 
@@ -161,11 +163,12 @@ export function runDevilAgent(
     })
   }
 
+  // NO OTE = high severity (backtest 8.5 tahun: WR@2R tanpa OTE ≈ 0%)
   if (!structure.oteBonus) {
     flags.push({
-      severity: 'medium', code: 'NO_OTE',
-      message: 'Di luar OTE 62–79% — entry kurang optimal, spread risk lebih besar',
-      scorePenalty: 6,
+      severity: 'high', code: 'NO_OTE',
+      message: '⛔ Tidak ada OTE 62–79% — backtest 8.5 tahun XAUUSD: WR@2R ~0% tanpa OTE. SKIP.',
+      scorePenalty: 22,
     })
   }
 
