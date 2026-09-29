@@ -84,18 +84,27 @@ function cleanHeader(h: string): string {
 
 function detectTF(candles: Candle[]): ImportedTF {
   if (candles.length < 3) return 'unknown'
-  const diffs: number[] = []
-  for (let i = 1; i < Math.min(20, candles.length); i++) {
-    diffs.push(candles[i].time - candles[i - 1].time)
-  }
-  const avg = diffs.reduce((a, b) => a + b, 0) / diffs.length
 
-  if (avg < 90)           return 'M1'
-  if (avg < 450)          return 'M5'
-  if (avg < 1200)         return 'M15'
-  if (avg < 2400)         return 'M30'
-  if (avg < 10800)        return 'H1'
-  if (avg < 25200)        return 'H4'
+  const diffs: number[] = []
+  // Scan more candles (up to 100) to get better sample
+  for (let i = 1; i < Math.min(100, candles.length); i++) {
+    const d = candles[i].time - candles[i - 1].time
+    // Filter out weekend gaps (> 4 days) and negative diffs
+    if (d > 0 && d < 4 * 24 * 3600) diffs.push(d)
+  }
+
+  if (diffs.length === 0) return 'unknown'
+
+  // Use MEDIAN not mean — weekend gaps skew the average badly
+  diffs.sort((a, b) => a - b)
+  const median = diffs[Math.floor(diffs.length / 2)]
+
+  if (median < 90)    return 'M1'
+  if (median < 450)   return 'M5'
+  if (median < 1200)  return 'M15'
+  if (median < 2400)  return 'M30'
+  if (median < 10800) return 'H1'
+  if (median < 25200) return 'H4'
   return 'D1'
 }
 
