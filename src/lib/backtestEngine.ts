@@ -18,8 +18,38 @@ import { runPhase1Pipeline }     from './agents'
 import { analyzeTopDown }        from './topDown'
 import { detectKeyLevels }       from './keyLevels'
 import { fetchOhlc }             from './marketData'
-import { getNyNow }              from './killZoneSchedule'
 import type { PropAccount, PersonalRules, DailyLog } from '../types'
+
+/* ──────────────── Get NY hour from historical timestamp ─── */
+
+/**
+ * CRITICAL: Backtest harus pakai jam historis dari candle,
+ * bukan jam sekarang. Kalau pakai getNyNow(), semua candle
+ * di luar jam trading saat backtest dijalankan → Grade D semua.
+ */
+function getNyHourFromTimestamp(unixSeconds: number): number {
+  try {
+    const date = new Date(unixSeconds * 1000)
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      hour: 'numeric',
+      hour12: false,
+    }).formatToParts(date)
+    const hourStr = parts.find(p => p.type === 'hour')?.value ?? '12'
+    const h = parseInt(hourStr, 10)
+    return isNaN(h) ? 12 : h % 24
+  } catch {
+    // DST-aware fallback
+    const date = new Date(unixSeconds * 1000)
+    const year = date.getUTCFullYear()
+    const marchFirst  = new Date(Date.UTC(year, 2, 1))
+    const dstStart    = new Date(Date.UTC(year, 2, 8 + ((7 - marchFirst.getUTCDay()) % 7), 7))
+    const novFirst    = new Date(Date.UTC(year, 10, 1))
+    const dstEnd      = new Date(Date.UTC(year, 10, 1 + ((7 - novFirst.getUTCDay()) % 7), 6))
+    const isDST       = date >= dstStart && date < dstEnd
+    return ((date.getUTCHours() + (isDST ? -4 : -5)) + 24) % 24
+  }
+}
 
 /* ──────────────── Default account untuk simulasi ─────────── */
 
@@ -203,17 +233,15 @@ export async function runBacktestOnCandles(
   const STEP      = 1        // walk forward 1 bar at a time
   const MIN_WIN   = 50       // minimum candles for pattern detection
   const MAX_LOOK  = 40       // max bars to look forward for trade exit
-  const { hour: nyHour } = getNyNow()
 
   // D1 bias (use all D1 data as approximate long-term bias)
-  // In backtest we approximate H4 from D1 (no separate H4 fetch to keep it fast)
   const topDownBias = d1Candles.length >= 10
     ? analyzeTopDown(d1Candles, d1Candles.slice(-Math.min(30, d1Candles.length)))
     : null
 
   let totalSetups = 0
   let gradeAB     = 0
-  let skippedIdx  = -1   // skip bars while previous trade is still running
+  let skippedIdx  = -1
 
   const n = h1Candles.length
   onProgress?.(`${instrument}: scanning ${n} H1 bars…`)
@@ -222,7 +250,12 @@ export async function runBacktestOnCandles(
     if (i <= skippedIdx) continue
 
     const window  = h1Candles.slice(0, i + 1)
-    const pattern = detectICTPattern(window, instrument, 'H1', nyHour)
+    const lastBar = window[window.length - 1]
+
+    // ← CRITICAL FIX: pakai jam historis dari candle, bukan jam sekarang
+    const historicalNyHour = getNyHourFromTimestamp(lastBar.time)
+
+    const pattern = detectICTPattern(window, instrument, 'H1', historicalNyHour)
     if (!pattern) continue
     if (!pattern.hasLiquiditySweep) continue
 
